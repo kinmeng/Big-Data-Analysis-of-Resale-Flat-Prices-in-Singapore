@@ -1,0 +1,77 @@
+---
+title: "latlon_data_onemap"
+author: "kinmeng"
+date: "2022-09-16"
+output: html_document
+---
+
+```{r}
+library(reticulate)
+# conda_create("resale_env") --> created environment
+use_condaenv("resale_env")
+# install python packages
+# conda_install("resale_env", c("requests","numpy","pandas"))
+
+```
+
+```{python}
+import pandas as pd
+import requests
+
+df = pd.read_csv("resale_flat_prices.csv")
+df.info()
+df.head()
+
+#append
+df['unique_add'] = df['block'] + ' ' + df['street_name']
+unique_rows = df['unique_add']
+unique_rows.head()
+unique_rows.tail()
+
+#obtain unique addresses only
+df['unique_add'].unique()
+#count number of unique addresses: 9346
+df['unique_add'].nunique() 
+
+#sample test the api with one address
+base_url = "https://developers.onemap.sg/"
+path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format('204,BEDOK NTH ST 1','Y','Y',1)
+result= requests.get(base_url+path)
+print(result.json())
+
+```
+
+```{python}
+
+#read in csv file as pandas dataframe
+df = pd.read_csv('resale_flat_prices.csv')
+
+#create unique_address column by concatenating block and street name
+df['unique_add'] = df['block'] + ' ' + df['street_name']
+# drop duplicates
+df = df[['unique_add']].drop_duplicates()
+#9346
+print(len(df))
+
+#Function to apply to each row of the dataframe
+def latlon(sample_df_row):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}".format(str(sample_df_row[0]),'Y','Y')
+  result= requests.get(base_url+path)
+  #   print(str(sample_df_row[0]))
+  #   print(result.json())
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['LONGITUDE'],result.json()['results'][0]['LATITUDE'] 
+  else:
+    print(result.json())
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+df.loc[:,'Lon'], df.loc[:,'Lat']= zip(*df['unique_add'].apply(latlon))
+#write to csv
+df.to_csv('unique_add_latlon.csv')
+
+
+```
+
