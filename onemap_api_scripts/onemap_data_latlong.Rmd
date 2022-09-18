@@ -16,32 +16,6 @@ conda_list()
 
 ```
 
-```{python}
-import pandas as pd
-import requests
-
-df = pd.read_csv("resale_flat_prices.csv")
-df.info()
-df.head()
-
-#append
-df['unique_add'] = df['block'] + ' ' + df['street_name']
-unique_rows = df['unique_add']
-unique_rows.head()
-unique_rows.tail()
-
-#obtain unique addresses only
-df['unique_add'].unique()
-#count number of unique addresses: 9346
-df['unique_add'].nunique() 
-
-#sample test the api with one address
-base_url = "https://developers.onemap.sg/"
-path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}".format('205 BOON LAY DR','Y','Y')
-result= requests.get(base_url+path)
-print(result.json())
-
-```
 
 ```{python}
 
@@ -75,3 +49,431 @@ df.to_csv('unique_add_latlon.csv')
 
 ```
 
+```{python}
+#https://github.com/yuan-yexi/hdb-resale-api/blob/master/script.py
+
+#obtain latlon for buses
+list_of_mrt = [
+    'Jurong East MRT Station',
+    'Bukit Batok MRT Station',
+    'Bukit Gombak MRT Station',
+    'Choa Chu Kang MRT Station',
+    'Yew Tee MRT Station',
+    'Kranji MRT Station',
+    'Marsiling MRT Station',
+    'Woodlands MRT Station',
+    'Admiralty MRT Station',
+    'Sembawang MRT Station',
+    'Canberra MRT Station',
+    'Yishun MRT Station',
+    'Khatib MRT Station',
+    'Yio Chu Kang MRT Station',
+    'Ang Mo Kio MRT Station',
+    'Bishan MRT Station',
+    'Braddell MRT Station',
+    'Toa Payoh MRT Station',
+    'Novena MRT Station',
+    'Newton MRT Station',
+    'Orchard MRT Station',
+    'Somerset MRT Station',
+    'Dhoby Ghaut MRT Station',
+    'City Hall MRT Station',
+    'Raffles Place MRT Station',
+    'Marina Bay MRT Station',
+    'Marina South Pier MRT Station',
+    'Pasir Ris MRT Station',
+    'Tampines MRT Station',
+    'Simei MRT Station',
+    'Tanah Merah MRT Station',
+    'Bedok MRT Station',
+    'Kembangan MRT Station',
+    'Eunos MRT Station',
+    'Paya Lebar MRT Station',
+    'Aljunied MRT Station',
+    'Kallang MRT Station',
+    'Lavender MRT Station',
+    'Bugis MRT Station',
+    'Tanjong Pagar MRT Station',
+    'Outram Park MRT Station',
+    'Tiong Bahru MRT Station',
+    'Redhill MRT Station',
+    'Queenstown MRT Station',
+    'Commonwealth MRT Station',
+    'Buona Vista MRT Station',
+    'Dover MRT Station',
+    'Clementi MRT Station',
+    'Chinese Garden MRT Station',
+    'Lakeside MRT Station',
+    'Boon Lay MRT Station',
+    'Pioneer MRT Station',
+    'Joo Koon MRT Station',
+    'Gul Circle MRT Station',
+    'Tuas Crescent MRT Station',
+    'Tuas West Road MRT Station',
+    'Tuas Link MRT Station',
+    'Expo MRT Station',
+    'Changi Airport MRT Station',
+    'HarbourFront MRT Station',
+    'Chinatown MRT Station',
+    'Clarke Quay MRT Station',
+    'Little India MRT Station',
+    'Farrer Park MRT Station',
+    'Boon Keng MRT Station',
+    'Potong Pasir MRT Station',
+    'Woodleigh MRT Station',
+    'Serangoon MRT Station',
+    'Kovan MRT Station',
+    'Hougang MRT Station',
+    'Buangkok MRT Station',
+    'Sengkang MRT Station',
+    'Punggol MRT Station',
+    'Bras Basah MRT Station',
+    'Esplanade MRT Station',
+    'Promenade MRT Station',
+    'Nicoll Highway MRT Station',
+    'Stadium MRT Station',
+    'Mountbatten MRT Station',
+    'Dakota MRT Station',
+    'MacPherson MRT Station',
+    'Tai Seng MRT Station',
+    'Bartley MRT Station',
+    'Lorong Chuan MRT Station',
+    'Marymount MRT Station',
+    'Caldecott MRT Station',
+    'Botanic Gardens MRT Station',
+    'Farrer Road MRT Station',
+    'Holland Village MRT Station',
+    'one-north MRT Station',
+    'Kent Ridge MRT Station',
+    'Haw Par Villa MRT Station',
+    'Pasir Panjang MRT Station',
+    'Labrador Park MRT Station',
+    'Telok Blangah MRT Station',
+    'Bayfront MRT Station',
+    'Bukit Panjang MRT Station',
+    'Cashew MRT Station',
+    'Hillview MRT Station',
+    'Beauty World MRT Station',
+    'King Albert Park MRT Station',
+    'Sixth Avenue MRT Station',
+    'Tan Kah Kee MRT Station',
+    'Stevens MRT Station',
+    'Rochor MRT Station',
+    'Downtown MRT Station',
+    'Telok Ayer MRT Station',
+    'Fort Canning MRT Station',
+    'Bencoolen MRT Station',
+    'Jalan Besar MRT Station',
+    'Bendemeer MRT Station',
+    'Geylang Bahru MRT Station',
+    'Mattar MRT Station',
+    'Ubi MRT Station',
+    'Kaki Bukit MRT Station',
+    'Bedok North MRT Station',
+    'Bedok Reservoir MRT Station',
+    'Tampines West MRT Station',
+    'Tampines East MRT Station',
+    'Upper Changi MRT Station'
+]
+
+len(list_of_mrt)
+
+mrt_df = pd.DataFrame(list_of_mrt, columns=['MRT_stations'])
+mrt_df.head()
+def latlon(mrt):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(mrt),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(mrt))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['LONGITUDE'],result.json()['results'][0]['LATITUDE'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+mrt_df.loc[:,'Lon'], mrt_df.loc[:,'Lat']= zip(*mrt_df['MRT_stations'].apply(latlon))
+#write to csv
+mrt_df.to_csv('mrt_lat_lon.csv')
+
+```
+
+```{python}
+#https://github.com/yuan-yexi/hdb-resale-api/blob/master/script.py
+
+#obtain latlon for malls
+list_of_malls = [
+    '100 AM',
+    '313@Somerset',
+    'Aperia',
+    'Balestier Hill Shopping Centre',
+    'Bugis Cube',
+    'Bugis Junction',
+    'Bugis+',
+    'Capitol Piazza',
+    'Cathay Cineleisure Orchard',
+    'City Gate',
+    'City Square Mall',
+    'CityLink Mall',
+    'Clarke Quay Central',
+    'Duo',
+    'Far East Plaza',
+    'Funan',
+    'Great World City',
+    'HDB Hub',
+    'Holland Village Shopping Mall',
+    'ION Orchard',
+    'Junction 8',
+    'Knightsbridge[1]',
+    'Liang Court',
+    'Liat Towers',
+    'Lucky Plaza',
+    'Marina Bay Financial Centre Tower 3',
+    'Marina Bay Link Mall',
+    'Marina Bay Sands',
+    'Marina One',
+    'Marina Square',
+    'Midpoint Orchard',
+    'Millenia Walk',
+    'Mustafa Shopping Centre',
+    'Ngee Ann City',
+    'Orchard Central',
+    'Orchard Gateway',
+    'Orchard Plaza',
+    'Orchard Shopping Centre',
+    'Palais Renaissance',
+    'Peoples Park Centre',
+    'Peoples Park Complex',
+    'Plaza Singapura',
+    'PoMo',
+    'Raffles City',
+    'Scotts Square',
+    'Serangoon Plaza',
+    'Shaw House and Centre',
+    'Sim Lim Square',
+    'Singapore Shopping Centre',
+    'Square 2',
+    'Suntec City',
+    'Tanglin Mall',
+    'Tangs',
+    'Tanjong Pagar Centre',
+    'Tekka Centre',
+    'The Centrepoint',
+    'The Paragon',
+    'The Poiz [2]',
+    'The Shoppes at Marina Bay Sands',
+    'The South Beach',
+    'Thomson Plaza',
+    'United Square, The Kids Learning Mall',
+    'Velocity',
+    'Wheelock Place',
+    'Wisma Atria',
+    'Zhongshan Mall',
+    '112 Katong',
+    'Bedok Mall',
+    'Bedok Point',
+    'Century Square',
+    'Changi Airport',
+    'Changi City Point',
+    'City Plaza',
+    'Djitsun Mall Bedok',
+    'Downtown East',
+    'East Village',
+    'Eastpoint Mall',
+    'Elias Mall',
+    'Kallang Wave Mall',
+    'Katong Square',
+    'Katong V',
+    'KINEX (formerly One KM Mall)',
+    'Leisure Park Kallang',
+    'Loyang Point',
+    'Our Tampines Hub',
+    'Parkway Parade',
+    'Paya Lebar Square',
+    'PLQ Mall',
+    'Singapore Post Centre',
+    'Tampines 1',
+    'Tampines Mall',
+    'The Flow',
+    'White Sands',
+    '888 Plaza',
+    'Admiralty Place',
+    'AMK Hub',
+    'Beauty World Centre',
+    'Beauty World Plaza',
+    'Broadway Plaza',
+    'Buangkok Square',
+    'Bukit Panjang Plaza',
+    'Bukit Timah Plaza',
+    'Causeway Point',
+    'Compass One',
+    'Djitsun Mall',
+    'Fajar Shopping Centre',
+    'Greenridge Shopping Centre',
+    'Greenwich V',
+    'Heartland Mall',
+    'Hillion Mall',
+    'HillV2',
+    'Hougang 1',
+    'Hougang Green Shopping Mall',
+    'Hougang Mall',
+    'Jubilee Square',
+    'Junction 10',
+    'Junction 9',
+    'Keat Hong Shopping Centre',
+    'KKH The Retail Mall',
+    'Limbang Shopping Centre',
+    'Lot One',
+    'Marsiling Mall',
+    'myVillage @ Serangoon',
+    'NEX',
+    'North East',
+    'North West',
+    'Northpoint City',
+    'Oasis Terraces',
+    'Punggol Plaza',
+    'Rail Mall',
+    'Rivervale Mall',
+    'Rivervale Plaza',
+    'Sembawang Shopping Centre',
+    'Sun Plaza',
+    'Sunshine Place',
+    'Teck Whye Shopping Centre',
+    'The Midtown',
+    'The Seletar Mall',
+    'Upper Serangoon Shopping Centre',
+    'Waterway Point',
+    'West Mall',
+    'Wisteria Mall',
+    'Woodlands Mart',
+    'Yew Tee Point',
+    'Yew Tee Shopping Centre',
+    'Yew Tee Square',
+    'Alexandra Retail Centre',
+    'HarbourFront Centre',
+    'VivoCity',
+    '321 Clementi',
+    'Alexandra Central',
+    'Anchorpoint',
+    'Big Box',
+    'Boon Lay Shopping Centre',
+    'Fairprice Hub',
+    'Gek Poh Shopping Centre',
+    'Grantral Mall',
+    'IMM',
+    'JCube',
+    'Jem',
+    'Jurong Point',
+    'OD Mall',
+    'Pioneer Mall',
+    'Queensway Shopping Centre',
+    'Rochester Mall',
+    'Taman Jurong Shopping Centre',
+    'The Clementi Mall',
+    'The Star Vista',
+    'Tiong Bahru Plaza',
+    'West Coast Plaza',
+    'Westgate Mall',
+]
+
+len(list_of_malls)
+
+malls_df = pd.DataFrame(list_of_malls, columns=['Malls'])
+malls_df.head()
+def latlon(malls):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(malls),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(malls))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['LONGITUDE'],result.json()['results'][0]['LATITUDE'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+malls_df.loc[:,'Lon'], malls_df.loc[:,'Lat']= zip(*malls_df['Malls'].apply(latlon))
+#write to csv
+malls_df.to_csv('malls_lat_lon.csv')
+
+```
+
+
+
+
+
+```{python}
+#To obtain X,Y
+
+#read in csv file as pandas dataframe
+df = pd.read_csv('unique_add_latlon.csv')
+df = df[['unique_add']]
+
+
+#9346
+print(len(df))
+df.head()
+#Function to apply to each row of the dataframe
+def obtain_XY(sample_df_row):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(sample_df_row),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(sample_df_row))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['X'],result.json()['results'][0]['Y'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+df.loc[:,'X'], df.loc[:,'Y']= zip(*df['unique_add'].apply(obtain_XY))
+#write to csv
+df.to_csv('unique_add_latlon_test.csv')
+
+
+
+```
+
+```{python}
+
+df1 = pd.read_csv('unique_add_latlon.csv', index_col=0)
+df1.head()
+
+df2 = pd.read_csv('unique_add_latlon_test.csv', index_col=0)
+df2.head()
+combined_latlon_xy = pd.merge(df1,df2, how='inner', on='unique_add')
+combined_latlon_xy.head()
+combined_latlon_xy.to_csv('unique_add_latlon.csv')
+
+
+```
+
+
+```{python}
+import requests
+import json
+base_url = "https://developers.onemap.sg/"
+token_path= "/privateapi/auth/post/getToken"
+result= requests.post(base_url+token_path, data={"email":'xxxxx', 'password':'xxxxx'})
+print(result.json())
+
+with open('keys.txt') as f:
+    doc = f.readlines()
+
+
+token = json.loads(str(doc[0]))['access_token']
+print(token)
+
+```
+
+```{python}
+#results do not seem to be useful
+
+reverse_geopath="/privateapi/commonsvc/revgeocodexy?location={}&token={}&buffer={}&addressType={}".format('28537.68004,38825.23263', token,500,'All')
+print(reverse_geopath)
+
+result= requests.get(base_url+reverse_geopath)
+print(result.json())
+
+
+```
