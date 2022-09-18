@@ -1,0 +1,67 @@
+---
+title: "data_processing_and_modelling"
+author: "kinmeng"
+date: "2022-09-18"
+output: html_document
+---
+
+```{r}
+
+latlon_data <- read.csv('unique_add_latlon.csv')
+resale_data <- read.csv('resale_flat_prices.csv')
+
+
+```
+
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+latlon_data
+latlon_data <- select(latlon_data, -X)
+head(latlon_data)
+
+```
+
+```{r}
+
+#create a new column unique_add in latlon dataset as a key
+resale_data$unique_add  <- paste(resale_data$block, resale_data$street_name)
+
+#left join as key
+combined_data <- left_join(resale_data, latlon_data, by="unique_add")
+
+
+```
+
+```{r}
+
+install.packages("geosphere")
+library('geosphere')
+
+#lat lon of downtown core
+central_lat <- 1.287953
+central_lon <- 103.851784
+
+
+#simple test to show that the function works
+sample_lat <- 1.306064
+sample_lon <- 103.8303	
+
+sample_dist <- distm(c(sample_lon,sample_lat),c(central_lon,central_lat), fun=distCosine)
+sample_dist
+
+#apply it to combined dataset
+combined_data <- combined_data %>% rowwise() %>%mutate(dist_to_central = distm(c(Lon,Lat),c(central_lon,central_lat),fun=distCosine)/1000)
+
+
+
+```
+
+```{r}
+
+
+
+write.csv(combined_data, "combined_data.csv", row.names=FALSE)
+
+
+```
