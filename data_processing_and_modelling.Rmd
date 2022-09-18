@@ -68,7 +68,5 @@ write.csv(combined_data, "combined_data.csv", row.names=FALSE)
 
 ```{r}
 
-help("Startup")
-
 
 ```

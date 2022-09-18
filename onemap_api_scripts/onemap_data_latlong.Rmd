@@ -450,6 +450,7 @@ combined_latlon_xy.to_csv('unique_add_latlon.csv')
 
 
 ```{python}
+#results do not seem to be useful
 import requests
 import json
 base_url = "https://developers.onemap.sg/"
