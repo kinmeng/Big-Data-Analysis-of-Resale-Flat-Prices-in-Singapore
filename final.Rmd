@@ -1,0 +1,159 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+setwd(getwd())
+library(readr)
+combined<-read_csv('combined_data.csv') 
+mallslatlon<-read_csv('malls_lat_lon.csv')
+mrtlatlon<-read_csv('mrt_lat_lon.csv')
+
+```
+
+```{r}
+
+library(dplyr)
+mallslatlon <- mallslatlon |>           
+  filter(Lon!='NULL', Lat!= "NULL", ) |>              #filtering all the non null data columns. 
+  select(Malls,Lon,Lat)               #eliminating the first unwanted column from the dataset
+
+```
+
+```{r}
+
+
+library(dplyr)
+mrtlatlon <- mrtlatlon |>
+  select(MRT_stations, Lon, Lat) |>
+  filter(Lon!= "NULL", Lat!="NULL")
+
+
+
+```
+
+Selecting unique addresses only
+```{r}
+
+uniqueaddresses <- combined |>
+  distinct(unique_add, .keep_all=TRUE)
+
+```
+
+
+Finding unique distances from MRT
+```{r}
+
+tic <- Sys.time()
+
+#install.packages("geosphere")
+library('geosphere')
+
+
+min_distance_mrt <- c()                  #create an empty vector to store future values in 
+
+for (i in 1:nrow(uniqueaddresses)){
+  house_lon<- as.numeric(uniqueaddresses[i,14])
+  house_lat<-as.numeric(uniqueaddresses[i,15])
+  mrt_vector<- (1:nrow(mrtlatlon)) #pre-allocate memory
+  for(i in 1:nrow(mrtlatlon)){
+    mrt_lon <- as.numeric(mrtlatlon[i,2])
+    mrt_lat <- as.numeric(mrtlatlon[i,3])
+    mrt_dist <- distm(c(house_lon,house_lat),c(mrt_lon,mrt_lat), fun = distCosine)/1000
+    mrt_vector[i] <- mrt_dist
+  }
+  min_distance_mrt <- append(min_distance_mrt, min(mrt_vector))
+}
+
+min_distance_mrt
+
+toc <- Sys.time()
+
+difftime(toc, tic)
+
+
+
+```
+
+Finding unique Distances from Malls
+```{r}
+
+
+tic <- Sys.time()
+
+#install.packages("geosphere")
+library('geosphere')
+
+
+min_distance_mall <- c()                  #create an empty vector to store future values in 
+
+for (i in 1:nrow(uniqueaddresses)){
+  house_lon<- as.numeric(uniqueaddresses[i,14])
+  house_lat<-as.numeric(uniqueaddresses[i,15])
+  mall_vector<- (1:nrow(mallslatlon)) #pre-allocate memory
+  for(i in 1:nrow(mallslatlon)){
+    mall_lon <- as.numeric(mallslatlon[i,2])
+    mall_lat <- as.numeric(mallslatlon[i,3])
+    mall_dist <- distm(c(house_lon,house_lat),c(mall_lon,mall_lat), fun = distCosine)/1000
+    mall_vector[i] <- mall_dist
+  }
+  min_distance_mall <- append(min_distance_mall, min(mall_vector))
+}
+
+min_distance_mall
+
+toc <- Sys.time()
+
+difftime(toc, tic)
+
+
+```
+
+
+Creating new Dataframe to store created values
+```{r}
+
+tojoin <- uniqueaddresses |>
+  select(unique_add)
+
+```
+
+
+Adding Columns to Combined Dataframe
+
+```{r}
+
+tojoin[  , ncol(tojoin) + 1] <- min_distance_mall  
+
+colnames(tojoin)[ncol(tojoin)] <- paste("dist_nearest_mall") 
+
+tojoin[  , ncol(tojoin) + 1] <- min_distance_mrt 
+
+colnames(tojoin)[ncol(tojoin)] <- paste("dist_nearest_mrt") 
+
+tojoin
+
+
+
+```
+
+Using full join to attain final dataframe
+```{r}
+
+final <- full_join(combined, tojoin, by = "unique_add")
+
+final
+
+```
+
+Removing Excess Data
+```{r}
+
+final <- final |>
+  select(month, storey_range, floor_area_sqm, flat_model, remaining_lease_std, resale_price, unique_add, dist_to_central, dist_nearest_mall, dist_nearest_mrt)
+  
+write.csv(final, "final_dataset.csv", row.names = FALSE)  #creating a csv file with the above code
+```
+
