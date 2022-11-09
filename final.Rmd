@@ -157,3 +157,119 @@ final <- final |>
 write.csv(final, "final_dataset.csv", row.names = FALSE)  #creating a csv file with the above code
 ```
 
+```{r}
+
+library(sparklyr)
+library(dplyr)
+
+
+sc <- spark_connect(master = "local", version = "3.3.0") 
+final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
+final_dataset
+
+
+#write parquet file
+spark_write_parquet(final_dataset,'dataset/final.parquet')
+
+#read parquet file as df
+df <- spark_read_parquet(sc, 'dataset/final.parquet')
+
+#Ensure that the df has the same number of rows as the original dataset (a sanity check)
+sdf_nrow(df)
+
+```
+
+```{r}
+
+library(corrr)
+library(ggplot2)
+
+
+df |> select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
+         dist_nearest_mall, dist_nearest_mrt) |>
+      correlate(use = "pairwise.complete.obs", method = "pearson") |>
+      shave(upper = TRUE) |>
+      rplot() + theme_dark() + theme(axis.text.x = element_text(angle = 45, vjust = 0.3, hjust=0.5)) + ggtitle("Correlation plot")
+
+
+
+```
+
+```{r}
+
+library(dbplot)
+df |> dbplot_histogram(floor_area_sqm)
+df |> dbplot_histogram(resale_price)
+df |> dbplot_histogram(remaining_lease_std)
+df |> mutate(log_price = log(resale_price)) |> collect() |> dbplot_histogram(log_price)
+
+```
+
+
+```{r}
+
+
+
+df |>
+dbplot_raster(x = floor_area_sqm, y = resale_price, fill = n(), resolution = 50)
+
+df |>
+dbplot_raster(x = dist_to_central, y = resale_price, fill = n(), resolution = 50) 
+
+df |>
+dbplot_raster(x = dist_nearest_mall, y = resale_price, fill = n(), resolution = 50)
+
+df |>
+dbplot_raster(x = dist_nearest_mrt, y = resale_price, fill = n(), resolution = 50)
+
+
+```
+
+
+```{r}
+#Data Visualization
+library(dplyr)
+library(ggplot2)
+library(tidyr) 
+
+
+df |> 
+  collect() |> 
+  select(month, resale_price)|>
+  mutate(month = as.factor(month)) |>
+  ggplot(aes(month, resale_price)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 80, vjust = 1, hjust=1, size =5), 
+                         axis.ticks.margin=unit(0,'cm')) + xlab("Date") + ylab('Resale Flat Prices') +
+  ggtitle("Boxplots of Resale Flat Prices over time")
+
+#view quantiles computed for each record
+#data <- df |> collect() |> group_by(month) |>summarise(quantile = list(round(quantile(resale_price,c(.10,.25,0.5,0.75)),1))) |> unnest_wider(quantile)
+
+
+df |> 
+  collect() |>
+  group_by(storey_range) |> 
+  arrange(storey_range) |>
+  ggplot(aes(storey_range, resale_price)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust=0.9), axis.ticks.margin=unit(0,'cm')) +
+  xlab("Storey Ranges") +
+  ylab("Resale Flat Prices") +
+  ggtitle("Boxplots of Resale Flat Prices over Storey Ranges")
+  
+
+
+
+```
+
+
+
+
+```{r}
+
+
+
+
+```
+
+
+
