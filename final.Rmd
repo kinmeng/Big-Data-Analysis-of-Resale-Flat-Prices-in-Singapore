@@ -265,11 +265,111 @@ df |>
 
 
 ```{r}
-
-
-
-
+glimpse(df)
 ```
 
+```{r}
+df |> 
+  ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range) |>
+  summary()
+```
+```{r}
+library(sparklyr)
+library(dplyr)
 
+sc <- spark_connect(master = "local", version = "3.3.0") 
+df <- spark_read_parquet(sc, 'dataset/final.parquet')
+```
+
+Determine which variables to use as features.
+unique_add replaced by the various distance measures.
+month replaced by remaining_lease_std.
+
+```{r}
+pipeline <- ml_pipeline(sc) |>
+  ft_string_indexer(
+    input_col = "flat_model", output_col = "flat_model_index"
+    ) |>
+  ft_string_indexer(
+    input_col = "storey_range", output_col = "storey_range_index"
+    ) |>
+  ft_vector_assembler(
+    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index"),
+    output_col = "features"
+  ) |>
+  ft_standard_scaler(
+    input_col = "features",
+    output_col = "features_scaled",
+    with_mean = TRUE
+  ) |>
+  ml_linear_regression(
+    features_col = "features_scaled",
+    label_col = "resale_price"
+  )
+
+pipeline
+```
+
+Split df to train and test sets.
+
+```{r}
+df_split <- df |>
+  sdf_random_split(training = 0.8, testing = 0.2, seed = 212)
+
+df_train <- df_split$training
+df_test <- df_split$testing
+```
+
+Fitting pipeline to model.
+
+```{r}
+pipeline_model <- ml_fit(pipeline, df_train)
+pipeline_model
+```
+
+Cross validate pipeline_model.
+
+```{r}
+cv <- ml_cross_validator(
+  sc,
+  estimator = pipeline,
+  estimator_param_maps = list(
+    linear_regression = list(
+      elastic_net_param = c(0, 1),
+      reg_param = seq(0, 1, 0.01)
+    )
+  ),
+  evaluator = ml_regression_evaluator(
+    sc,
+    label_col = "resale_price"
+  ),
+  num_folds = 10,
+  parallelism = 3,
+  seed = 212
+)
+
+cv
+```
+
+```{r}
+cv_model <- ml_fit(cv, df_train)
+
+ml_validation_metrics(cv_model) |>
+  arrange(rmse)
+```
+
+Save ML model.
+
+```{r}
+ml_save(cv_model$best_model, path = "spark_model_hdb", overwrite = TRUE)
+```
+
+Plumber
+
+```{r}
+library(plumber)
+
+plumb(file = "spark-plumber-hdb.R") |>
+  pr_run(port = 8000)
+```
 
