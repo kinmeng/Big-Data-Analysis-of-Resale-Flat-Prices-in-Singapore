@@ -142,7 +142,7 @@ tojoin
 Using full join to attain final dataframe
 ```{r}
 
-final <- full_join(combined, tojoin, by = "unique_add")
+final <- left_join(combined, tojoin, by = "unique_add")
 
 final
 
@@ -186,35 +186,6 @@ sdf_nrow(df)
 ```
 
 ```{r}
-
-library(corrr)
-library(ggplot2)
-
-
-df |> select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
-         dist_nearest_mall, dist_nearest_mrt) |>
-      correlate(use = "pairwise.complete.obs", method = "pearson") |>
-      shave(upper = TRUE) |>
-      rplot() + theme_dark() + theme(axis.text.x = element_text(angle = 45, vjust = 0.3, hjust=0.5)) + ggtitle("Correlation plot")
-
-
-
-```
-
-```{r}
-
-library(dbplot)
-df |> dbplot_histogram(floor_area_sqm)
-df |> dbplot_histogram(resale_price)
-df |> dbplot_histogram(remaining_lease_std)
-df |> mutate(log_price = log(resale_price)) |> collect() |> dbplot_histogram(log_price)
-
-```
-
-
-```{r}
-
-
 
 df |>
 dbplot_raster(x = floor_area_sqm, y = resale_price, fill = n(), resolution = 50)
@@ -409,4 +380,5 @@ library(plumber)
 plumb(file = "spark-plumber-hdb.R") |>
   pr_run(port = 8000)
 ```
+
 
