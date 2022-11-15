@@ -161,19 +161,25 @@ write.csv(final, "final_dataset.csv", row.names = FALSE)  #creating a csv file w
 
 library(sparklyr)
 library(dplyr)
-
+library(lubridate)
 
 sc <- spark_connect(master = "local", version = "3.3.0") 
 final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
 final_dataset
 
-
 #write parquet file
-spark_write_parquet(final_dataset,'dataset/final.parquet')
+#spark_write_parquet(final_dataset,'dataset/final.parquet')
 
 #read parquet file as df
 df <- spark_read_parquet(sc, 'dataset/final.parquet')
 
+
+df <- df |> collect() |> rename(date=month) |>
+  mutate(year = as.Date(as.character(date),'%Y')) |> mutate(year=year(year)) 
+df <- df |> mutate(month = format(date,'%m')) |> mutate(month=as.numeric(month)) |> mutate(yearmonth=round(year+month/12,2))
+df <- df |> select(-c('year','month'))
+df <- copy_to(sc, df, overwrite = TRUE)
+df
 #Ensure that the df has the same number of rows as the original dataset (a sanity check)
 sdf_nrow(df)
 
@@ -235,9 +241,9 @@ library(tidyr)
 
 df |> 
   collect() |> 
-  select(month, resale_price)|>
-  mutate(month = as.factor(month)) |>
-  ggplot(aes(month, resale_price)) +
+  select(date, resale_price)|>
+  mutate(date = as.factor(date)) |>
+  ggplot(aes(date, resale_price)) +
   geom_boxplot() + theme(axis.text.x = element_text(angle = 80, vjust = 1, hjust=1, size =5), 
                          axis.ticks.margin=unit(0,'cm')) + xlab("Date") + ylab('Resale Flat Prices') +
   ggtitle("Boxplots of Resale Flat Prices over time")
@@ -269,17 +275,15 @@ glimpse(df)
 ```
 
 ```{r}
-df |> 
-  ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range) |>
-  summary()
-```
-```{r}
-library(sparklyr)
-library(dplyr)
 
-sc <- spark_connect(master = "local", version = "3.3.0") 
-df <- spark_read_parquet(sc, 'dataset/final.parquet')
+library(sparklyr)
+df 
+
+df |> ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range + yearmonth) |>
+summary()
+
 ```
+
 
 Determine which variables to use as features.
 unique_add replaced by the various distance measures.
@@ -294,7 +298,7 @@ pipeline <- ml_pipeline(sc) |>
     input_col = "storey_range", output_col = "storey_range_index"
     ) |>
   ft_vector_assembler(
-    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index"),
+    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "yearmonth"),
     output_col = "features"
   ) |>
   ft_standard_scaler(
@@ -320,16 +324,20 @@ df_train <- df_split$training
 df_test <- df_split$testing
 ```
 
+
+
 Fitting pipeline to model.
 
 ```{r}
-pipeline_model <- ml_fit(pipeline, df_train)
+pipeline_model <- ml_fit(pipeline, df_train)  
 pipeline_model
 ```
+
 
 Cross validate pipeline_model.
 
 ```{r}
+
 cv <- ml_cross_validator(
   sc,
   estimator = pipeline,
@@ -344,7 +352,7 @@ cv <- ml_cross_validator(
     label_col = "resale_price"
   ),
   num_folds = 10,
-  parallelism = 3,
+  parallelism = 7,
   seed = 212
 )
 
@@ -358,11 +366,40 @@ ml_validation_metrics(cv_model) |>
   arrange(rmse)
 ```
 
+
+```{r}
+
+#is_ml_transformer(cv_model)
+
+cv_predict <- ml_predict(cv_model$best_model, df_test)
+
+
+RMSE_1 <- ml_regression_evaluator(
+cv_predict,
+label_col = "resale_price",
+prediction_col = "prediction",
+metric_name = "rmse"
+)
+
+RMSE_1
+
+```
+
+
+
 Save ML model.
 
 ```{r}
 ml_save(cv_model$best_model, path = "spark_model_hdb", overwrite = TRUE)
 ```
+
+```{r}
+library(sparklyr)
+ml_load(sc, path="spark_model_hdb")
+
+
+```
+
 
 Plumber
 
