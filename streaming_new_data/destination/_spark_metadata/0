@@ -1,0 +1,3 @@
+v1
+{"path":"file:///C:/Users/drago/Desktop/github/DSA306-Big-Data-Analytics-Project/streaming_new_data/destination/part-00000-de1066eb-ac0a-47b1-963b-c92fa78988b4-c000.csv","size":4119933,"isDir":false,"modificationTime":1668700035006,"blockReplication":1,"blockSize":33554432,"action":"add"}
+{"path":"file:///C:/Users/drago/Desktop/github/DSA306-Big-Data-Analytics-Project/streaming_new_data/destination/part-00001-9c24060c-02ed-4796-a0c3-196c93160e32-c000.csv","size":2538500,"isDir":false,"modificationTime":1668700034918,"blockReplication":1,"blockSize":33554432,"action":"add"}

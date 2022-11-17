@@ -1,0 +1,84 @@
+---
+title: "spark_streaming"
+author: "kinmeng"
+date: "2022-11-17"
+output: html_document
+---
+
+```{r}
+#install.packages(c("httr", "jsonlite"))
+library(httr)
+library(jsonlite)
+library(sparklyr)
+res <- GET("https://data.gov.sg/api/action/datastore_search?resource_id=1b702208-44bf-4829-b620-4615ee19b57c&limit=100000000000000000")
+DF <- fromJSON(rawToChar(res$content))
+
+DF$result$records
+
+write.csv(DF$result$records,"source/batch_1.csv", row.names=TRUE )
+sc <- spark_connect(master="local", version="3.3.0")
+
+
+stream <-  stream_read_csv(sc, "source/") |> stream_write_csv("destination/")
+
+```
+
+
+
+
+```{r}
+
+
+df <- spark_read_csv(sc,"destination/")
+df
+
+```
+
+
+```{r}
+
+
+
+
+```
+
+
+
+```{r}
+
+
+
+
+```
+
+
+```{r}
+
+
+
+
+```
+
+
+```{r}
+
+
+
+
+```
+
+
+```{r}
+
+
+
+
+```
+
+
+```{r}
+
+
+
+
+```
