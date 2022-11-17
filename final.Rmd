@@ -3,9 +3,75 @@ title: "R Notebook"
 output: html_notebook
 ---
 
+
 ```{r}
 
-setwd(getwd())
+latlon_data <- read.csv('unique_add_latlon.csv')
+resale_data <- read.csv('resale_flat_prices.csv')
+
+
+```
+
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+latlon_data
+latlon_data <- select(latlon_data, -X)
+head(latlon_data)
+
+```
+
+```{r}
+
+#create a new column unique_add in latlon dataset as a key
+resale_data$unique_add  <- paste(resale_data$block, resale_data$street_name)
+
+#left join as key
+combined_data <- left_join(resale_data, latlon_data, by="unique_add")
+
+
+```
+
+```{r}
+
+install.packages("geosphere")
+library('geosphere')
+
+#lat lon of downtown core
+central_lat <- 1.287953
+central_lon <- 103.851784
+
+
+#simple test to show that the function works
+sample_lat <- 1.306064
+sample_lon <- 103.8303	
+
+sample_dist <- distm(c(sample_lon,sample_lat),c(central_lon,central_lat), fun=distCosine)
+sample_dist
+
+#apply it to combined dataset
+combined_data <- combined_data %>% rowwise() %>%mutate(dist_to_central = distm(c(Lon,Lat),c(central_lon,central_lat),fun=distCosine)/1000)
+
+
+
+```
+
+
+```{r}
+
+
+
+write.csv(combined_data, "combined_data.csv", row.names=FALSE)
+
+
+```
+
+
+
+
+```{r}
+
+setwd("~/GitHub/DSA306-Big-Data-Analytics-Project")
 library(readr)
 combined<-read_csv('combined_data.csv') 
 mallslatlon<-read_csv('malls_lat_lon.csv')
@@ -15,7 +81,7 @@ mrtlatlon<-read_csv('mrt_lat_lon.csv')
 
 ```{r}
 
-library(dplyr)
+
 mallslatlon <- mallslatlon |>           
   filter(Lon!='NULL', Lat!= "NULL", ) |>              #filtering all the non null data columns. 
   select(Malls,Lon,Lat)               #eliminating the first unwanted column from the dataset
@@ -25,7 +91,6 @@ mallslatlon <- mallslatlon |>
 ```{r}
 
 
-library(dplyr)
 mrtlatlon <- mrtlatlon |>
   select(MRT_stations, Lon, Lat) |>
   filter(Lon!= "NULL", Lat!="NULL")
@@ -46,8 +111,7 @@ uniqueaddresses <- combined |>
 Finding unique distances from MRT
 ```{r}
 
-#install.packages("geosphere")
-library('geosphere')
+
 
 
 min_distance_mrt <- c()                  #create an empty vector to store future values in 
@@ -75,10 +139,6 @@ min_distance_mrt
 Finding unique Distances from Malls
 ```{r}
 
-
-
-#install.packages("geosphere")
-library('geosphere')
 
 
 min_distance_mall <- c()                  #create an empty vector to store future values in 
@@ -159,7 +219,8 @@ final <- read_csv("final_dataset.csv")
 
 final <- final |>
   mutate(month = as.Date(paste(month, "-01", sep= ""))) |>
-  mutate(Covid = case_when(month < as.Date("2020-02-01")~0, month >= as.Date("2020-02-01")~1))
+  mutate(Covid = case_when(month < as.Date("2020-02-01")~0, month >= as.Date("2020-02-01")~1)) |>
+  rename(date = month)
 
 write.csv(final, "final_dataset.csv", row.names = FALSE)
 ```
@@ -167,33 +228,23 @@ write.csv(final, "final_dataset.csv", row.names = FALSE)
 
 
 ```{r}
-
+setwd("~/GitHub/DSA306-Big-Data-Analytics-Project")
 library(sparklyr)
 library(dplyr)
-<<<<<<< HEAD
 
-setwd("~/GitHub/DSA306-Big-Data-Analytics-Project")
-=======
 library(lubridate)
 
->>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
 sc <- spark_connect(master = "local", version = "3.3.0") 
+
 final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
 final_dataset
 
 #write parquet file
-#spark_write_parquet(final_dataset,'dataset/final.parquet')
+spark_write_parquet(final_dataset,'dataset/final.parquet')
 
 #read parquet file as df
 df <- spark_read_parquet(sc, 'dataset/final.parquet')
 
-
-df <- df |> collect() |> rename(date=month) |>
-  mutate(year = as.Date(as.character(date),'%Y')) |> mutate(year=year(year)) 
-df <- df |> mutate(month = format(date,'%m')) |> mutate(month=as.numeric(month)) |> mutate(yearmonth=round(year+month/12,2))
-df <- df |> select(-c('year','month'))
-df <- copy_to(sc, df, overwrite = TRUE)
-df
 #Ensure that the df has the same number of rows as the original dataset (a sanity check)
 sdf_nrow(df)
 
@@ -201,7 +252,7 @@ sdf_nrow(df)
 
 ```{r}
 
-<<<<<<< HEAD
+
 library(corrr)
 library(ggplot2)
 
@@ -247,9 +298,6 @@ df |> mutate(log_price = log(resale_price)) |> collect() |> dbplot_histogram(log
 ```{r}
 
 
-
-=======
->>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
 df |>
 dbplot_raster(x = floor_area_sqm, y = resale_price, fill = n(), resolution = 50)
 
@@ -309,26 +357,11 @@ glimpse(df)
 ```
 
 ```{r}
-<<<<<<< HEAD
+
 df |> 
   ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range + Covid) |>
   summary()
 ```
-
-```{r}
-library(sparklyr)
-library(dplyr)
-=======
->>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
-
-library(sparklyr)
-df 
-
-df |> ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range + yearmonth) |>
-summary()
-
-```
-
 
 Determine which variables to use as features.
 unique_add replaced by the various distance measures.
@@ -343,11 +376,7 @@ pipeline <- ml_pipeline(sc) |>
     input_col = "storey_range", output_col = "storey_range_index"
     ) |>
   ft_vector_assembler(
-<<<<<<< HEAD
     input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "Covid"),
-=======
-    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "yearmonth"),
->>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
     output_col = "features"
   ) |>
   ft_standard_scaler(
