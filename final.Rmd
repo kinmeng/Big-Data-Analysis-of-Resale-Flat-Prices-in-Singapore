@@ -234,16 +234,16 @@ library(dplyr)
 
 library(lubridate)
 
-sc <- spark_connect(master = "local", version = "3.3.0") 
+sc <- spark_connect(master = "local", version = "3.3.0")
 
 final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
 final_dataset
 
 #write parquet file
-spark_write_parquet(final_dataset,'dataset/final.parquet')
+spark_write_parquet(final_dataset,'dataset/final_v2.parquet')
 
 #read parquet file as df
-df <- spark_read_parquet(sc, 'dataset/final.parquet')
+df <- spark_read_parquet(sc, 'dataset/final_v2.parquet')
 
 #Ensure that the df has the same number of rows as the original dataset (a sanity check)
 sdf_nrow(df)
@@ -392,6 +392,18 @@ pipeline <- ml_pipeline(sc) |>
 pipeline
 ```
 
+Saving pipeline
+
+```{r}
+ml_save(pipeline, path = "spark_pipeline_hdb", overwrite = TRUE)
+```
+
+Loading pipeline
+
+```{r}
+pipeline <- ml_load(sc, path = "spark_pipeline_hdb")
+```
+
 Split df to train and test sets.
 
 ```{r}
@@ -422,7 +434,7 @@ cv <- ml_cross_validator(
   estimator_param_maps = list(
     linear_regression = list(
       elastic_net_param = c(0,1),
-      reg_param = c(0.2,0.5,0.7)
+      reg_param = c(0.1, 0.005, 0.001)
     )
   ),
   evaluator = ml_regression_evaluator(
@@ -430,7 +442,7 @@ cv <- ml_cross_validator(
     label_col = "resale_price"
   ),
   num_folds = 10,
-  parallelism = 7,
+  parallelism = 3,
   seed = 212
 )
 
@@ -439,6 +451,8 @@ cv
 
 ```{r}
 cv_model <- ml_fit(cv, df_train)
+
+cv_model$best_model
 
 ml_validation_metrics(cv_model) |>
   arrange(rmse)
@@ -481,12 +495,34 @@ ml_load(sc, path="spark_model_hdb")
 
 Plumber
 
+For simplicity sake, we will not input unique_add in plumber API so as to reduce computing time. We draw a random resale flat from the test set df_test to use its data for demonstration purposes.
+
 ```{r}
-install.packages("plumber")
+set.seed(212)
+collect(df_test)[sample(1:30000,1),]
+```
+
+resale_price: 450000
+storey_range: 04 TO 06
+floor_area_sqm: 110
+flat_model: Improved
+remaining_lease_std: 85
+unique_add: 101A PUNGGOL FIELD
+dist_to_central: 13.64757
+dist_nearest_mall: 0.6587825
+dist_nearest_mrt: 1.356258
+town: PUNGGOL
+Covid: 0
+
+We will use these values in the API.
+
+```{r}
+#install.packages("plumber")
 library(plumber)
 
 plumb(file = "spark-plumber-hdb.R") |>
   pr_run(port = 8000)
 ```
+
 
 
