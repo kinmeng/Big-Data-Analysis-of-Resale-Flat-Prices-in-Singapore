@@ -46,8 +46,6 @@ uniqueaddresses <- combined |>
 Finding unique distances from MRT
 ```{r}
 
-tic <- Sys.time()
-
 #install.packages("geosphere")
 library('geosphere')
 
@@ -69,9 +67,6 @@ for (i in 1:nrow(uniqueaddresses)){
 
 min_distance_mrt
 
-toc <- Sys.time()
-
-difftime(toc, tic)
 
 
 
@@ -81,7 +76,6 @@ Finding unique Distances from Malls
 ```{r}
 
 
-tic <- Sys.time()
 
 #install.packages("geosphere")
 library('geosphere')
@@ -104,9 +98,6 @@ for (i in 1:nrow(uniqueaddresses)){
 
 min_distance_mall
 
-toc <- Sys.time()
-
-difftime(toc, tic)
 
 
 ```
@@ -152,17 +143,40 @@ Removing Excess Data
 ```{r}
 
 final <- final |>
-  select(month, storey_range, floor_area_sqm, flat_model, remaining_lease_std, resale_price, unique_add, dist_to_central, dist_nearest_mall, dist_nearest_mrt)
+  select(month, storey_range, floor_area_sqm, flat_model, remaining_lease_std, resale_price, unique_add, dist_to_central, dist_nearest_mall, dist_nearest_mrt, town)
   
 write.csv(final, "final_dataset.csv", row.names = FALSE)  #creating a csv file with the above code
 ```
+
+
+Adding COVID predictor 
+
+```{r}
+
+library(lubridate)
+
+final <- read_csv("final_dataset.csv")
+
+final <- final |>
+  mutate(month = as.Date(paste(month, "-01", sep= ""))) |>
+  mutate(Covid = case_when(month < as.Date("2020-02-01")~0, month >= as.Date("2020-02-01")~1))
+
+write.csv(final, "final_dataset.csv", row.names = FALSE)
+```
+
+
 
 ```{r}
 
 library(sparklyr)
 library(dplyr)
+<<<<<<< HEAD
+
+setwd("~/GitHub/DSA306-Big-Data-Analytics-Project")
+=======
 library(lubridate)
 
+>>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
 sc <- spark_connect(master = "local", version = "3.3.0") 
 final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
 final_dataset
@@ -187,6 +201,55 @@ sdf_nrow(df)
 
 ```{r}
 
+<<<<<<< HEAD
+library(corrr)
+library(ggplot2)
+
+
+df |> select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
+         dist_nearest_mall, dist_nearest_mrt) |>
+      correlate(use = "pairwise.complete.obs", method = "pearson") |>
+      shave(upper = TRUE) |>
+      rplot() + theme_dark() + theme(axis.text.x = element_text(angle = 45, vjust = 0.3, hjust=0.5)) + ggtitle("Correlation plot")
+
+
+
+```
+
+```{r}
+#install.packages("ggrepel")
+library(ggrepel)
+
+indiv_town <- df |>
+  select(town, resale_price, dist_to_central) |>
+  group_by(town) |>
+  summarise(cost_town = mean(resale_price), dist_town = mean(dist_to_central))
+
+
+indiv_town_plot <- ggplot(data = indiv_town, aes(x = dist_town, y = cost_town)) + geom_label_repel(aes(label = town), size = 3)+ geom_point(aes(color = town), show.legend = FALSE) + geom_smooth(method = "lm", se = 0)
+
+indiv_town_plot
+
+```
+
+
+```{r}
+
+library(dbplot)
+df |> dbplot_histogram(floor_area_sqm)
+df |> dbplot_histogram(resale_price)
+df |> dbplot_histogram(remaining_lease_std)
+df |> mutate(log_price = log(resale_price)) |> collect() |> dbplot_histogram(log_price)
+
+```
+
+
+```{r}
+
+
+
+=======
+>>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
 df |>
 dbplot_raster(x = floor_area_sqm, y = resale_price, fill = n(), resolution = 50)
 
@@ -246,6 +309,17 @@ glimpse(df)
 ```
 
 ```{r}
+<<<<<<< HEAD
+df |> 
+  ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range + Covid) |>
+  summary()
+```
+
+```{r}
+library(sparklyr)
+library(dplyr)
+=======
+>>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
 
 library(sparklyr)
 df 
@@ -269,7 +343,11 @@ pipeline <- ml_pipeline(sc) |>
     input_col = "storey_range", output_col = "storey_range_index"
     ) |>
   ft_vector_assembler(
+<<<<<<< HEAD
+    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "Covid"),
+=======
     input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "yearmonth"),
+>>>>>>> 773368a8995309f409020de8dc7670af9d2e1267
     output_col = "features"
   ) |>
   ft_standard_scaler(
@@ -314,8 +392,8 @@ cv <- ml_cross_validator(
   estimator = pipeline,
   estimator_param_maps = list(
     linear_regression = list(
-      elastic_net_param = c(0, 1),
-      reg_param = seq(0, 1, 0.01)
+      elastic_net_param = c(0,1),
+      reg_param = c(0.2,0.5,0.7)
     )
   ),
   evaluator = ml_regression_evaluator(
@@ -375,6 +453,7 @@ ml_load(sc, path="spark_model_hdb")
 Plumber
 
 ```{r}
+install.packages("plumber")
 library(plumber)
 
 plumb(file = "spark-plumber-hdb.R") |>
