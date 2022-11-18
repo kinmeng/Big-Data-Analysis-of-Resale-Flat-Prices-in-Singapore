@@ -32,7 +32,6 @@ conda_list()
 ```
 
 ```{python}
-
 #read in csv file as pandas dataframe
 df = pd.read_csv('resale_flat_prices.csv')
 
