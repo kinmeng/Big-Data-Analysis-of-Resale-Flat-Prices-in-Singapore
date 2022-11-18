@@ -10,19 +10,31 @@ output: html_document
 library(httr)
 library(jsonlite)
 library(sparklyr)
+library(dplyr)
+
 res <- GET("https://data.gov.sg/api/action/datastore_search?resource_id=1b702208-44bf-4829-b620-4615ee19b57c&limit=100000000000000000")
 DF <- fromJSON(rawToChar(res$content))
 
 DF$result$records
 
-write.csv(DF$result$records,"source/batch_1.csv", row.names=TRUE )
+DF$result$records <- DF$result$records |>
+  rename(remaining_lease_std = "remaining_lease") |>
+  select(month, town, flat_type, block, street_name, storey_range, floor_area_sqm, flat_model, lease_commence_date, remaining_lease_std, resale_price) |>
+  arrange(desc(month))
+  
+dir.create("source")
+dir.create("destination")
+
+write.csv(DF$result$records,"source/batch_1.csv", row.names=FALSE )
 sc <- spark_connect(master="local", version="3.3.0")
 
 
-stream <-  stream_read_csv(sc, "source/") |> stream_write_csv("destination/")
+stream <-  stream_read_csv(sc, "source/") |> 
+  stream_write_csv("destination/")
+
+
 
 ```
-
 
 
 
@@ -38,7 +50,7 @@ df
 ```{r}
 
 
-
+spark_disconnect(sc)
 
 ```
 
