@@ -29,7 +29,6 @@ conda_install("resale_env", c("requests","numpy","pandas"))
 use_condaenv("resale_env")
 conda_install("resale_env",'requests')
 conda_list()
-
 ```
 
 ```{python}
@@ -60,8 +59,6 @@ def latlon(sample_df_row):
 df.loc[:,'Lon'], df.loc[:,'Lat']= zip(*df['unique_add'].apply(latlon))
 #write to csv
 df.to_csv('unique_add_latlon.csv')
-
-
 ```
 
 ```{python}
@@ -210,7 +207,6 @@ def latlon(mrt):
 mrt_df.loc[:,'Lon'], mrt_df.loc[:,'Lat']= zip(*mrt_df['MRT_stations'].apply(latlon))
 #write to csv
 mrt_df.to_csv('mrt_lat_lon.csv')
-
 ```
 
 ```{python}
@@ -410,7 +406,6 @@ def latlon(malls):
 malls_df.loc[:,'Lon'], malls_df.loc[:,'Lat']= zip(*malls_df['Malls'].apply(latlon))
 #write to csv
 malls_df.to_csv('malls_lat_lon.csv')
-
 ```
 
 ```{python}
@@ -440,13 +435,9 @@ def obtain_XY(sample_df_row):
 df.loc[:,'X'], df.loc[:,'Y']= zip(*df['unique_add'].apply(obtain_XY))
 #write to csv
 df.to_csv('unique_add_latlon_test.csv')
-
-
-
 ```
 
 ```{python}
-
 df1 = pd.read_csv('unique_add_latlon.csv', index_col=0)
 df1.head()
 
@@ -455,8 +446,6 @@ df2.head()
 combined_latlon_xy = pd.merge(df1,df2, how='inner', on='unique_add')
 combined_latlon_xy.head()
 combined_latlon_xy.to_csv('unique_add_latlon.csv')
-
-
 ```
 
 ```{python}
@@ -471,10 +460,8 @@ print(result.json())
 with open('keys.txt') as f:
     doc = f.readlines()
 
-
 token = json.loads(str(doc[0]))['access_token']
 print(token)
-
 ```
 
 ```{python}
@@ -485,8 +472,6 @@ print(reverse_geopath)
 
 result= requests.get(base_url+reverse_geopath)
 print(result.json())
-
-
 ```
 
 ## Joining lat/long with original
