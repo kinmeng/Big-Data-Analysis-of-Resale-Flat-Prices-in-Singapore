@@ -267,6 +267,26 @@ df |> select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
 
 ```
 
+
+```{r}
+
+#install.packages("corrplot")
+library(corrplot)
+
+df <- df |> 
+  select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
+         dist_nearest_mall, dist_nearest_mrt) |>
+  collect()
+  
+
+
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA")) #Colours for correlation plot
+
+corrplot(cor(df), method="color", col=col(200), diag=FALSE, type="lower", order="hclust", title="Correlation Plot", addCoef.col = "black", insig = "blank", mar=c(0,0,2,0), tl.srt= 45, tl.col = "black")
+
+```
+
+
 ```{r}
 #install.packages("ggrepel")
 library(ggrepel)
