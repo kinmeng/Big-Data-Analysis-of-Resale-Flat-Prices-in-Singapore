@@ -9,7 +9,7 @@ date: "2022-11-18"
 
 For this project, we will be modelling HDB resale prices. Apart from the given flat characteristics, we will be deriving additional data that we believe have an impact of resale prices.
 
-Lines 14 to 667 covers the process of obtaining our final data set. Due to the long run time, the final data set is attached in the Zip file / GitHub repository. Likewise, Parquet files, Spark pipelines and Spark models are all included. 
+Lines 14 to 681 covers the process of obtaining our final data set. Due to the long run time, the final data set is attached in the Zip file / GitHub repository. Likewise, Parquet files, Spark pipelines and Spark models are all included. 
 
 # Obtaining data
 
@@ -649,6 +649,35 @@ final <- final |>
   rename(date = month)
 
 write.csv(final, "final_dataset.csv", row.names = FALSE)
+```
+
+
+# Streaming
+
+While streaming data might not be the most viable for this project, we can incorporate a sample of what we think this process could be like to supply real-time data to the subsequent steps.
+
+```{r}
+#install.packages(c("httr", "jsonlite"))
+library(httr); library(jsonlite); library(sparklyr); library(dplyr)
+
+res <- GET("https://data.gov.sg/api/action/datastore_search?resource_id=1b702208-44bf-4829-b620-4615ee19b57c&limit=100000000000000000")
+DF <- fromJSON(rawToChar(res$content))
+
+DF$result$records
+
+DF$result$records <- DF$result$records |>
+  rename(remaining_lease_std = "remaining_lease") |>
+  select(month, town, flat_type, block, street_name, storey_range, floor_area_sqm, flat_model, lease_commence_date, remaining_lease_std, resale_price) |>
+  arrange(desc(month))
+  
+dir.create("source")
+dir.create("destination")
+
+write.csv(DF$result$records,"source/batch_1.csv", row.names=FALSE )
+sc <- spark_connect(master="local", version="3.3.0")
+
+stream <-  stream_read_csv(sc, "source/") |> 
+  stream_write_csv("destination/")
 ```
 
 # Exploratory Data Analysis
