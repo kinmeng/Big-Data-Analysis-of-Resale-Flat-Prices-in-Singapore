@@ -22,8 +22,8 @@ DF$result$records <- DF$result$records |>
   select(month, town, flat_type, block, street_name, storey_range, floor_area_sqm, flat_model, lease_commence_date, remaining_lease_std, resale_price) |>
   arrange(desc(month))
   
-
-
+dir.create("source")
+dir.create("destination")
 
 write.csv(DF$result$records,"source/batch_1.csv", row.names=FALSE )
 sc <- spark_connect(master="local", version="3.3.0")
