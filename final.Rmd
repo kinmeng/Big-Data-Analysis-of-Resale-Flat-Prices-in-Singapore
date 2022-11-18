@@ -488,8 +488,6 @@ ml_save(cv_model$best_model, path = "spark_model_hdb", overwrite = TRUE)
 ```{r}
 library(sparklyr)
 ml_load(sc, path="spark_model_hdb")
-
-
 ```
 
 

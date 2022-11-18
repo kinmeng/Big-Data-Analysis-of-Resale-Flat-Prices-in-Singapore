@@ -2,12 +2,12 @@
 
 library(sparklyr); library(dplyr)
 
-sc <- spark_connect(master = "local", version = "3.0.0")
+sc <- spark_connect(master = "local", version = "3.3.0")
 
 spark_model <- ml_load(sc, path = "spark_model_hdb")
 
 #* @post /predict
-function(floor_area_sqm = 110, remaining_lease_std = 85, dist_to_central = 13.64757 , dist_nearest_mall = 0.6587825, dist_nearest_mrt = 1.356258, flat_model = "Improved", storey_range = "04 TO 06", Covid = 0){
+function(floor_area_sqm, remaining_lease_std, dist_to_central, dist_nearest_mall, dist_nearest_mrt, flat_model, storey_range, Covid){
   new_data <- data.frame(
     floor_area_sqm = as.double(floor_area_sqm),
     remaining_lease_std = as.integer(remaining_lease_std),
