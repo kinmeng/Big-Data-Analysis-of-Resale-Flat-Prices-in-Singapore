@@ -38,7 +38,6 @@ stream <-  stream_read_csv(sc, "source/") |>
 
 
 
-
 ```{r}
 
 
@@ -51,7 +50,7 @@ df
 ```{r}
 
 
-
+spark_disconnect(sc)
 
 ```
 
