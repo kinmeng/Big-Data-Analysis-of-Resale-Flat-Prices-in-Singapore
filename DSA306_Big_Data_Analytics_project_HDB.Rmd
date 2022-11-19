@@ -1,0 +1,972 @@
+---
+title: "DSA306 Project"
+author: "Tan Kin Meng, Kwong Wen Lin, Oh Rui Han, Wei Zihao"
+output: html_document
+date: "2022-11-18"
+---
+
+# Introduction
+
+For this project, we will be modelling HDB resale prices. Apart from the given flat characteristics, we will be deriving additional data that we believe have an impact of resale prices.
+
+Lines 14 to 681 covers the process of obtaining our final data set. Due to the long run time, the final data set is attached in the Zip file / GitHub repository. Likewise, Parquet files, Spark pipelines and Spark models are all included. 
+
+# Obtaining data
+
+We obtain our resale price data from Data.gov.sg (https://data.gov.sg/dataset/resale-flat-prices).
+
+## onemap API
+
+We next need to find the various latitude and longitude of the unique addresses as well as nearest MRT, mall, and Central (set as Raffles Place MRT station). 
+
+To do so, we use Python to access the onemap API. 
+
+```{r}
+library(reticulate)
+conda_create("resale_env") #--> created environment
+# install python packages
+conda_install("resale_env", c("requests","numpy","pandas"))
+use_condaenv("resale_env")
+conda_install("resale_env",'requests')
+conda_list()
+```
+
+```{python}
+#read in csv file as pandas dataframe
+df = pd.read_csv('resale_flat_prices.csv')
+
+#create unique_address column by concatenating block and street name
+df['unique_add'] = df['block'] + ' ' + df['street_name']
+# drop duplicates
+df = df[['unique_add']].drop_duplicates()
+#9346
+print(len(df))
+
+#Function to apply to each row of the dataframe
+def latlon(sample_df_row):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(sample_df_row),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(sample_df_row))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['LONGITUDE'],result.json()['results'][0]['LATITUDE'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+df.loc[:,'Lon'], df.loc[:,'Lat']= zip(*df['unique_add'].apply(latlon))
+#write to csv
+df.to_csv('unique_add_latlon.csv')
+```
+
+```{python}
+#https://github.com/yuan-yexi/hdb-resale-api/blob/master/script.py
+
+#obtain latlon for buses
+list_of_mrt = [
+    'Jurong East MRT Station',
+    'Bukit Batok MRT Station',
+    'Bukit Gombak MRT Station',
+    'Choa Chu Kang MRT Station',
+    'Yew Tee MRT Station',
+    'Kranji MRT Station',
+    'Marsiling MRT Station',
+    'Woodlands MRT Station',
+    'Admiralty MRT Station',
+    'Sembawang MRT Station',
+    'Canberra MRT Station',
+    'Yishun MRT Station',
+    'Khatib MRT Station',
+    'Yio Chu Kang MRT Station',
+    'Ang Mo Kio MRT Station',
+    'Bishan MRT Station',
+    'Braddell MRT Station',
+    'Toa Payoh MRT Station',
+    'Novena MRT Station',
+    'Newton MRT Station',
+    'Orchard MRT Station',
+    'Somerset MRT Station',
+    'Dhoby Ghaut MRT Station',
+    'City Hall MRT Station',
+    'Raffles Place MRT Station',
+    'Marina Bay MRT Station',
+    'Marina South Pier MRT Station',
+    'Pasir Ris MRT Station',
+    'Tampines MRT Station',
+    'Simei MRT Station',
+    'Tanah Merah MRT Station',
+    'Bedok MRT Station',
+    'Kembangan MRT Station',
+    'Eunos MRT Station',
+    'Paya Lebar MRT Station',
+    'Aljunied MRT Station',
+    'Kallang MRT Station',
+    'Lavender MRT Station',
+    'Bugis MRT Station',
+    'Tanjong Pagar MRT Station',
+    'Outram Park MRT Station',
+    'Tiong Bahru MRT Station',
+    'Redhill MRT Station',
+    'Queenstown MRT Station',
+    'Commonwealth MRT Station',
+    'Buona Vista MRT Station',
+    'Dover MRT Station',
+    'Clementi MRT Station',
+    'Chinese Garden MRT Station',
+    'Lakeside MRT Station',
+    'Boon Lay MRT Station',
+    'Pioneer MRT Station',
+    'Joo Koon MRT Station',
+    'Gul Circle MRT Station',
+    'Tuas Crescent MRT Station',
+    'Tuas West Road MRT Station',
+    'Tuas Link MRT Station',
+    'Expo MRT Station',
+    'Changi Airport MRT Station',
+    'HarbourFront MRT Station',
+    'Chinatown MRT Station',
+    'Clarke Quay MRT Station',
+    'Little India MRT Station',
+    'Farrer Park MRT Station',
+    'Boon Keng MRT Station',
+    'Potong Pasir MRT Station',
+    'Woodleigh MRT Station',
+    'Serangoon MRT Station',
+    'Kovan MRT Station',
+    'Hougang MRT Station',
+    'Buangkok MRT Station',
+    'Sengkang MRT Station',
+    'Punggol MRT Station',
+    'Bras Basah MRT Station',
+    'Esplanade MRT Station',
+    'Promenade MRT Station',
+    'Nicoll Highway MRT Station',
+    'Stadium MRT Station',
+    'Mountbatten MRT Station',
+    'Dakota MRT Station',
+    'MacPherson MRT Station',
+    'Tai Seng MRT Station',
+    'Bartley MRT Station',
+    'Lorong Chuan MRT Station',
+    'Marymount MRT Station',
+    'Caldecott MRT Station',
+    'Botanic Gardens MRT Station',
+    'Farrer Road MRT Station',
+    'Holland Village MRT Station',
+    'one-north MRT Station',
+    'Kent Ridge MRT Station',
+    'Haw Par Villa MRT Station',
+    'Pasir Panjang MRT Station',
+    'Labrador Park MRT Station',
+    'Telok Blangah MRT Station',
+    'Bayfront MRT Station',
+    'Bukit Panjang MRT Station',
+    'Cashew MRT Station',
+    'Hillview MRT Station',
+    'Beauty World MRT Station',
+    'King Albert Park MRT Station',
+    'Sixth Avenue MRT Station',
+    'Tan Kah Kee MRT Station',
+    'Stevens MRT Station',
+    'Rochor MRT Station',
+    'Downtown MRT Station',
+    'Telok Ayer MRT Station',
+    'Fort Canning MRT Station',
+    'Bencoolen MRT Station',
+    'Jalan Besar MRT Station',
+    'Bendemeer MRT Station',
+    'Geylang Bahru MRT Station',
+    'Mattar MRT Station',
+    'Ubi MRT Station',
+    'Kaki Bukit MRT Station',
+    'Bedok North MRT Station',
+    'Bedok Reservoir MRT Station',
+    'Tampines West MRT Station',
+    'Tampines East MRT Station',
+    'Upper Changi MRT Station'
+]
+
+len(list_of_mrt)
+
+mrt_df = pd.DataFrame(list_of_mrt, columns=['MRT_stations'])
+mrt_df.head()
+def latlon(mrt):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(mrt),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(mrt))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['LONGITUDE'],result.json()['results'][0]['LATITUDE'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+mrt_df.loc[:,'Lon'], mrt_df.loc[:,'Lat']= zip(*mrt_df['MRT_stations'].apply(latlon))
+#write to csv
+mrt_df.to_csv('mrt_lat_lon.csv')
+```
+
+```{python}
+#https://github.com/yuan-yexi/hdb-resale-api/blob/master/script.py
+
+#obtain latlon for malls
+list_of_malls = [
+    '100 AM',
+    '313@Somerset',
+    'Aperia',
+    'Balestier Hill Shopping Centre',
+    'Bugis Cube',
+    'Bugis Junction',
+    'Bugis+',
+    'Capitol Piazza',
+    'Cathay Cineleisure Orchard',
+    'City Gate',
+    'City Square Mall',
+    'CityLink Mall',
+    'Clarke Quay Central',
+    'Duo',
+    'Far East Plaza',
+    'Funan',
+    'Great World City',
+    'HDB Hub',
+    'Holland Village Shopping Mall',
+    'ION Orchard',
+    'Junction 8',
+    'Knightsbridge[1]',
+    'Liang Court',
+    'Liat Towers',
+    'Lucky Plaza',
+    'Marina Bay Financial Centre Tower 3',
+    'Marina Bay Link Mall',
+    'Marina Bay Sands',
+    'Marina One',
+    'Marina Square',
+    'Midpoint Orchard',
+    'Millenia Walk',
+    'Mustafa Shopping Centre',
+    'Ngee Ann City',
+    'Orchard Central',
+    'Orchard Gateway',
+    'Orchard Plaza',
+    'Orchard Shopping Centre',
+    'Palais Renaissance',
+    'Peoples Park Centre',
+    'Peoples Park Complex',
+    'Plaza Singapura',
+    'PoMo',
+    'Raffles City',
+    'Scotts Square',
+    'Serangoon Plaza',
+    'Shaw House and Centre',
+    'Sim Lim Square',
+    'Singapore Shopping Centre',
+    'Square 2',
+    'Suntec City',
+    'Tanglin Mall',
+    'Tangs',
+    'Tanjong Pagar Centre',
+    'Tekka Centre',
+    'The Centrepoint',
+    'The Paragon',
+    'The Poiz [2]',
+    'The Shoppes at Marina Bay Sands',
+    'The South Beach',
+    'Thomson Plaza',
+    'United Square, The Kids Learning Mall',
+    'Velocity',
+    'Wheelock Place',
+    'Wisma Atria',
+    'Zhongshan Mall',
+    '112 Katong',
+    'Bedok Mall',
+    'Bedok Point',
+    'Century Square',
+    'Changi Airport',
+    'Changi City Point',
+    'City Plaza',
+    'Djitsun Mall Bedok',
+    'Downtown East',
+    'East Village',
+    'Eastpoint Mall',
+    'Elias Mall',
+    'Kallang Wave Mall',
+    'Katong Square',
+    'Katong V',
+    'KINEX (formerly One KM Mall)',
+    'Leisure Park Kallang',
+    'Loyang Point',
+    'Our Tampines Hub',
+    'Parkway Parade',
+    'Paya Lebar Square',
+    'PLQ Mall',
+    'Singapore Post Centre',
+    'Tampines 1',
+    'Tampines Mall',
+    'The Flow',
+    'White Sands',
+    '888 Plaza',
+    'Admiralty Place',
+    'AMK Hub',
+    'Beauty World Centre',
+    'Beauty World Plaza',
+    'Broadway Plaza',
+    'Buangkok Square',
+    'Bukit Panjang Plaza',
+    'Bukit Timah Plaza',
+    'Causeway Point',
+    'Compass One',
+    'Djitsun Mall',
+    'Fajar Shopping Centre',
+    'Greenridge Shopping Centre',
+    'Greenwich V',
+    'Heartland Mall',
+    'Hillion Mall',
+    'HillV2',
+    'Hougang 1',
+    'Hougang Green Shopping Mall',
+    'Hougang Mall',
+    'Jubilee Square',
+    'Junction 10',
+    'Junction 9',
+    'Keat Hong Shopping Centre',
+    'KKH The Retail Mall',
+    'Limbang Shopping Centre',
+    'Lot One',
+    'Marsiling Mall',
+    'myVillage @ Serangoon',
+    'NEX',
+    'North East',
+    'North West',
+    'Northpoint City',
+    'Oasis Terraces',
+    'Punggol Plaza',
+    'Rail Mall',
+    'Rivervale Mall',
+    'Rivervale Plaza',
+    'Sembawang Shopping Centre',
+    'Sun Plaza',
+    'Sunshine Place',
+    'Teck Whye Shopping Centre',
+    'The Midtown',
+    'The Seletar Mall',
+    'Upper Serangoon Shopping Centre',
+    'Waterway Point',
+    'West Mall',
+    'Wisteria Mall',
+    'Woodlands Mart',
+    'Yew Tee Point',
+    'Yew Tee Shopping Centre',
+    'Yew Tee Square',
+    'Alexandra Retail Centre',
+    'HarbourFront Centre',
+    'VivoCity',
+    '321 Clementi',
+    'Alexandra Central',
+    'Anchorpoint',
+    'Big Box',
+    'Boon Lay Shopping Centre',
+    'Fairprice Hub',
+    'Gek Poh Shopping Centre',
+    'Grantral Mall',
+    'IMM',
+    'JCube',
+    'Jem',
+    'Jurong Point',
+    'OD Mall',
+    'Pioneer Mall',
+    'Queensway Shopping Centre',
+    'Rochester Mall',
+    'Taman Jurong Shopping Centre',
+    'The Clementi Mall',
+    'The Star Vista',
+    'Tiong Bahru Plaza',
+    'West Coast Plaza',
+    'Westgate Mall',
+]
+
+len(list_of_malls)
+
+malls_df = pd.DataFrame(list_of_malls, columns=['Malls'])
+malls_df.head()
+def latlon(malls):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(malls),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(malls))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['LONGITUDE'],result.json()['results'][0]['LATITUDE'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+malls_df.loc[:,'Lon'], malls_df.loc[:,'Lat']= zip(*malls_df['Malls'].apply(latlon))
+#write to csv
+malls_df.to_csv('malls_lat_lon.csv')
+```
+
+```{python}
+#To obtain X,Y
+
+#read in csv file as pandas dataframe
+df = pd.read_csv('unique_add_latlon.csv')
+df = df[['unique_add']]
+
+
+#9346
+print(len(df))
+df.head()
+#Function to apply to each row of the dataframe
+def obtain_XY(sample_df_row):
+  base_url = "https://developers.onemap.sg/"
+  path= "/commonapi/search?searchVal={}&returnGeom={}&getAddrDetails={}&pageNum={}".format(str(sample_df_row),'Y','Y',1)
+  result= requests.get(base_url+path)
+  print(str(sample_df_row))
+  if result.json()['found'] >= 1:
+    x, y=  result.json()['results'][0]['X'],result.json()['results'][0]['Y'] 
+  else:
+    x, y = 'NULL','NULL'
+  return x,y
+
+#populate lat/long
+df.loc[:,'X'], df.loc[:,'Y']= zip(*df['unique_add'].apply(obtain_XY))
+#write to csv
+df.to_csv('unique_add_latlon_test.csv')
+```
+
+```{python}
+df1 = pd.read_csv('unique_add_latlon.csv', index_col=0)
+df1.head()
+
+df2 = pd.read_csv('unique_add_latlon_test.csv', index_col=0)
+df2.head()
+combined_latlon_xy = pd.merge(df1,df2, how='inner', on='unique_add')
+combined_latlon_xy.head()
+combined_latlon_xy.to_csv('unique_add_latlon.csv')
+```
+
+```{python}
+#results do not seem to be useful
+import requests
+import json
+base_url = "https://developers.onemap.sg/"
+token_path= "/privateapi/auth/post/getToken"
+result= requests.post(base_url+token_path, data={"email":'xxxxx', 'password':'xxxxx'})
+print(result.json())
+
+with open('keys.txt') as f:
+    doc = f.readlines()
+
+token = json.loads(str(doc[0]))['access_token']
+print(token)
+```
+
+```{python}
+#results do not seem to be useful
+
+reverse_geopath="/privateapi/commonsvc/revgeocodexy?location={}&token={}&buffer={}&addressType={}".format('28537.68004,38825.23263', token,500,'All')
+print(reverse_geopath)
+
+result= requests.get(base_url+reverse_geopath)
+print(result.json())
+```
+
+## Joining lat/long with original
+
+With the unique latitude and longitude, we join this information with the original data set.
+
+```{r}
+latlon_data <- read.csv('unique_add_latlon.csv')
+resale_data <- read.csv('resale_flat_prices.csv')
+```
+
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+
+latlon_data
+latlon_data <- select(latlon_data, -X)
+head(latlon_data)
+```
+
+```{r}
+#create a new column unique_add in latlon dataset as a key
+resale_data$unique_add  <- paste(resale_data$block, resale_data$street_name)
+
+#left join as key
+combined_data <- left_join(resale_data, latlon_data, by="unique_add")
+```
+
+```{r}
+#install.packages("geosphere")
+library('geosphere')
+
+#lat lon of downtown core
+central_lat <- 1.287953
+central_lon <- 103.851784
+
+
+#simple test to show that the function works
+sample_lat <- 1.306064
+sample_lon <- 103.8303	
+
+sample_dist <- distm(c(sample_lon,sample_lat),c(central_lon,central_lat), fun=distCosine)
+sample_dist
+
+#apply it to combined dataset
+combined_data <- combined_data %>% rowwise() %>%mutate(dist_to_central = distm(c(Lon,Lat),c(central_lon,central_lat),fun=distCosine)/1000)
+```
+
+Finally, we write this data set to a CSV file for later use.
+
+```{r}
+write.csv(combined_data, "combined_data.csv", row.names=FALSE)
+```
+
+# Nearest amenities
+
+We next join the combined data set with malls and MRT coordinates, allowing us to calculate the distance between the property and its nearest amenity.
+
+```{r}
+library(readr)
+
+combined <- read_csv('combined_data.csv') 
+mallslatlon <- read_csv('malls_lat_lon.csv')
+mrtlatlon <- read_csv('mrt_lat_lon.csv')
+```
+
+```{r}
+mallslatlon <- mallslatlon |>           
+  filter(Lon!='NULL', Lat!= "NULL", ) |>              #filtering all the non null data columns. 
+  select(Malls,Lon,Lat)               #eliminating the first unwanted column from the dataset
+```
+
+```{r}
+mrtlatlon <- mrtlatlon |>
+  select(MRT_stations, Lon, Lat) |>
+  filter(Lon!= "NULL", Lat!="NULL")
+```
+
+Selecting unique addresses only.
+
+```{r}
+uniqueaddresses <- combined |>
+  distinct(unique_add, .keep_all=TRUE)
+```
+
+Finding unique distances from MRT.
+
+```{r}
+min_distance_mrt <- c()                  #create an empty vector to store future values in 
+
+for (i in 1:nrow(uniqueaddresses)){
+  house_lon<- as.numeric(uniqueaddresses[i,14])
+  house_lat<-as.numeric(uniqueaddresses[i,15])
+  mrt_vector<- (1:nrow(mrtlatlon)) #pre-allocate memory
+  for(i in 1:nrow(mrtlatlon)){
+    mrt_lon <- as.numeric(mrtlatlon[i,2])
+    mrt_lat <- as.numeric(mrtlatlon[i,3])
+    mrt_dist <- distm(c(house_lon,house_lat),c(mrt_lon,mrt_lat), fun = distCosine)/1000
+    mrt_vector[i] <- mrt_dist
+  }
+  min_distance_mrt <- append(min_distance_mrt, min(mrt_vector))
+}
+
+min_distance_mrt
+```
+
+Finding unique Distances from Malls.
+
+```{r}
+min_distance_mall <- c()                  #create an empty vector to store future values in 
+
+for (i in 1:nrow(uniqueaddresses)){
+  house_lon<- as.numeric(uniqueaddresses[i,14])
+  house_lat<-as.numeric(uniqueaddresses[i,15])
+  mall_vector<- (1:nrow(mallslatlon)) #pre-allocate memory
+  for(i in 1:nrow(mallslatlon)){
+    mall_lon <- as.numeric(mallslatlon[i,2])
+    mall_lat <- as.numeric(mallslatlon[i,3])
+    mall_dist <- distm(c(house_lon,house_lat),c(mall_lon,mall_lat), fun = distCosine)/1000
+    mall_vector[i] <- mall_dist
+  }
+  min_distance_mall <- append(min_distance_mall, min(mall_vector))
+}
+
+min_distance_mall
+```
+
+Creating new Dataframe to store created values.
+
+```{r}
+tojoin <- uniqueaddresses |>
+  select(unique_add)
+```
+
+Adding Columns to Combined Dataframe.
+
+```{r}
+tojoin[  , ncol(tojoin) + 1] <- min_distance_mall  
+
+colnames(tojoin)[ncol(tojoin)] <- paste("dist_nearest_mall") 
+
+tojoin[  , ncol(tojoin) + 1] <- min_distance_mrt 
+
+colnames(tojoin)[ncol(tojoin)] <- paste("dist_nearest_mrt") 
+
+tojoin
+```
+
+Using full join to attain final data frame.
+
+```{r}
+final <- left_join(combined, tojoin, by = "unique_add")
+
+final
+```
+
+Removing excess data.
+
+```{r}
+final <- final |>
+  select(month, storey_range, floor_area_sqm, flat_model, remaining_lease_std, resale_price, unique_add, dist_to_central, dist_nearest_mall, dist_nearest_mrt, town)
+  
+# write.csv(final, "final_dataset.csv", row.names = FALSE)  # creating a csv file with the above code 
+```
+
+Adding COVID predictor. As this was added after the fact, the original code was to read the final CSV final back into R to transform. This code has been commented out for continuity. 
+
+```{r}
+library(lubridate)
+
+# final <- read_csv("final_dataset.csv") # hashed out for continutity
+
+final <- final |>
+  mutate(month = as.Date(paste(month, "-01", sep= ""))) |>
+  mutate(Covid = case_when(month < as.Date("2020-02-01")~0, month >= as.Date("2020-02-01")~1)) |>
+  rename(date = month)
+
+write.csv(final, "final_dataset.csv", row.names = FALSE)
+```
+
+
+# Streaming
+
+While streaming data might not be the most viable for this project, we can incorporate a sample of what we think this process could be like to supply real-time data to the subsequent steps.
+
+```{r}
+#install.packages(c("httr", "jsonlite"))
+library(httr); library(jsonlite); library(sparklyr); library(dplyr)
+
+res <- GET("https://data.gov.sg/api/action/datastore_search?resource_id=1b702208-44bf-4829-b620-4615ee19b57c&limit=100000000000000000")
+DF <- fromJSON(rawToChar(res$content))
+
+DF$result$records
+
+DF$result$records <- DF$result$records |>
+  rename(remaining_lease_std = "remaining_lease") |>
+  select(month, town, flat_type, block, street_name, storey_range, floor_area_sqm, flat_model, lease_commence_date, remaining_lease_std, resale_price) |>
+  arrange(desc(month))
+  
+dir.create("source")
+dir.create("destination")
+
+write.csv(DF$result$records,"source/batch_1.csv", row.names=FALSE )
+sc <- spark_connect(master="local", version="3.3.0")
+
+stream <-  stream_read_csv(sc, "source/") |> 
+  stream_write_csv("destination/")
+```
+
+# Exploratory Data Analysis
+
+With the data set completed, we begin analysing the data.
+
+## Reading CSV into Spark
+
+```{r}
+library(sparklyr); library(dplyr); library(lubridate)
+
+sc <- spark_connect(master = "local", version = "3.3.0")
+
+final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
+final_dataset
+```
+
+We also convert and save the data set into a Parquet file format. 
+
+```{r}
+#write parquet file
+spark_write_parquet(final_dataset, 'dataset/final_data_hdb.parquet')
+```
+
+Loading Parquet file. 
+
+```{r}
+#read parquet file as df
+df <- spark_read_parquet(sc, 'dataset/final_data_hdb.parquet')
+
+#Ensure that the df has the same number of rows as the original dataset (a sanity check)
+sdf_nrow(df)
+
+glimpse(df)
+```
+
+## Data visualisation
+
+(Commentary will be in the report.)
+
+```{r}
+#install.packages("corrplot")
+library(corrplot)
+
+df_R <- df |> 
+  select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central, dist_nearest_mall, dist_nearest_mrt) |>
+  collect()
+
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA")) #Colours for correlation plot
+
+corrplot(cor(df_R), method="color", col=col(200), diag=FALSE, type="lower", order="hclust", title="Correlation Plot", addCoef.col = "black", insig = "blank", mar=c(0,0,2,0), tl.srt= 45, tl.col = "black")
+```
+
+```{r}
+#install.packages("ggrepel")
+library(ggrepel)
+
+indiv_town <- df |>
+  select(town, resale_price, dist_to_central) |>
+  group_by(town) |>
+  summarise(cost_town = mean(resale_price), dist_town = mean(dist_to_central))
+
+
+indiv_town_plot <- ggplot(data = indiv_town, aes(x = dist_town, y = cost_town)) + geom_label_repel(aes(label = town), size = 3)+ geom_point(aes(color = town), show.legend = FALSE) + geom_smooth(method = "lm", se = 0)
+
+indiv_town_plot
+```
+
+```{r}
+library(dbplot)
+
+df |> 
+  dbplot_histogram(floor_area_sqm)
+
+df |> 
+  dbplot_histogram(resale_price)
+
+df |> 
+  dbplot_histogram(remaining_lease_std)
+
+df |> 
+  mutate(log_price = log(resale_price)) |> collect() |> dbplot_histogram(log_price)
+
+```
+
+```{r}
+df |>
+  dbplot_raster(x = floor_area_sqm, y = resale_price, fill = n(), resolution = 50)
+
+df |>
+  dbplot_raster(x = dist_to_central, y = resale_price, fill = n(), resolution = 50) 
+
+df |>
+  dbplot_raster(x = dist_nearest_mall, y = resale_price, fill = n(), resolution = 50)
+
+df |>
+  dbplot_raster(x = dist_nearest_mrt, y = resale_price, fill = n(), resolution = 50)
+```
+
+```{r}
+#Data Visualization
+library(dplyr); library(ggplot2); library(tidyr)
+
+df |> 
+  collect() |> 
+  select(date, resale_price)|>
+  mutate(date = as.factor(date)) |>
+  ggplot(aes(date, resale_price)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 80, vjust = 1, hjust=1, size =5), 
+                         axis.ticks.margin=unit(0,'cm')) + xlab("Date") + ylab('Resale Flat Prices') +
+  ggtitle("Boxplots of Resale Flat Prices over time")
+
+#view quantiles computed for each record
+#data <- df |> collect() |> group_by(month) |>summarise(quantile = list(round(quantile(resale_price,c(.10,.25,0.5,0.75)),1))) |> unnest_wider(quantile)
+
+df |> 
+  collect() |>
+  group_by(storey_range) |> 
+  arrange(storey_range) |>
+  ggplot(aes(storey_range, resale_price)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust=0.9), axis.ticks.margin=unit(0,'cm')) +
+  xlab("Storey Ranges") +
+  ylab("Resale Flat Prices") +
+  ggtitle("Boxplots of Resale Flat Prices over Storey Ranges")
+```
+
+## Initial Linear Regression
+
+We explore what the model could look like by directly applying a linear regression with all variables we want to consider.
+
+```{r}
+df |> 
+  ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range + Covid) |>
+  summary()
+```
+
+# Pipeline
+
+We convert flat_model and storey_range from string values to index. 
+
+```{r}
+pipeline <- ml_pipeline(sc) |>
+  ft_string_indexer(
+    input_col = "flat_model", output_col = "flat_model_index"
+    ) |>
+  ft_string_indexer(
+    input_col = "storey_range", output_col = "storey_range_index"
+    ) |>
+  ft_vector_assembler(
+    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "Covid"),
+    output_col = "features"
+  ) |>
+  ft_standard_scaler(
+    input_col = "features",
+    output_col = "features_scaled",
+    with_mean = TRUE
+  ) |>
+  ml_linear_regression(
+    features_col = "features_scaled",
+    label_col = "resale_price"
+  )
+
+pipeline
+```
+
+Saving pipeline.
+
+```{r}
+ml_save(pipeline, path = "spark_pipeline_hdb", overwrite = TRUE)
+```
+
+Loading pipeline. 
+
+```{r}
+pipeline <- ml_load(sc, path = "spark_pipeline_hdb")
+```
+
+# Cross-validation
+
+Split data into train and test sets.
+
+```{r}
+df_split <- df |>
+  sdf_random_split(training = 0.8, testing = 0.2, seed = 212)
+
+df_train <- df_split$training
+df_test <- df_split$testing
+```
+
+Fitting pipeline to model.
+
+```{r}
+pipeline_model <- ml_fit(pipeline, df_train)  
+pipeline_model
+```
+
+Cross validate pipeline_model. (reg_param values fixed at 0.1, 0.005 and 0.001 to reduce compute time)
+
+```{r}
+cv <- ml_cross_validator(
+  sc,
+  estimator = pipeline,
+  estimator_param_maps = list(
+    linear_regression = list(
+      elastic_net_param = c(0,1),
+      reg_param = c(0.1, 0.005, 0.001)
+    )
+  ),
+  evaluator = ml_regression_evaluator(
+    sc,
+    label_col = "resale_price"
+  ),
+  num_folds = 10,
+  parallelism = 3,
+  seed = 212
+)
+
+cv
+```
+
+Validating best model.
+
+```{r}
+cv_model <- ml_fit(cv, df_train)
+
+cv_model$best_model
+
+ml_validation_metrics(cv_model) |>
+  arrange(rmse)
+```
+
+```{r}
+
+#is_ml_transformer(cv_model)
+
+cv_predict <- ml_predict(cv_model$best_model, df_test)
+
+
+RMSE_1 <- ml_regression_evaluator(
+cv_predict,
+label_col = "resale_price",
+prediction_col = "prediction",
+metric_name = "rmse"
+)
+
+RMSE_1
+```
+
+Saving ML model.
+
+```{r}
+ml_save(cv_model$best_model, path = "spark_model_hdb", overwrite = TRUE)
+```
+
+Loading ML model.
+
+```{r}
+ml_load(sc, path="spark_model_hdb")
+```
+
+# plumber API
+
+For simplicity sake, we will not input unique_add in plumber API so as to reduce computing time. This means that we will assume that the distances between the property and nearest amenities are known. For demonstration purposes, we randomly draw a HDB flat to use its variables.
+
+```{r}
+set.seed(212)
+collect(df_test)[sample(1:30000,1),]
+```
+
+resale_price: 450000
+storey_range: 04 TO 06
+floor_area_sqm: 110
+flat_model: Improved
+remaining_lease_std: 85
+unique_add: 101A PUNGGOL FIELD
+dist_to_central: 13.64757
+dist_nearest_mall: 0.6587825
+dist_nearest_mrt: 1.356258
+town: PUNGGOL
+Covid: 0
+
+We will use these values in the API.
+
+```{r}
+#install.packages("plumber")
+library(plumber)
+
+plumb(file = "spark-plumber-hdb.R") |>
+  pr_run(port = 8000)
+```
+
+spark-plumber-hdb.R will be included in the Zip file / GitHub repository.
