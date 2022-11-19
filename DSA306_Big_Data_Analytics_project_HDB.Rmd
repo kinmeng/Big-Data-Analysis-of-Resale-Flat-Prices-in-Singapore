@@ -695,7 +695,7 @@ final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
 final_dataset
 ```
 
-We also convert and save the data set into a Paquet file format. 
+We also convert and save the data set into a Parquet file format. 
 
 ```{r}
 #write parquet file
@@ -719,24 +719,12 @@ glimpse(df)
 (Commentary will be in the report.)
 
 ```{r}
-library(corrr); library(ggplot2)
-
-df |> 
-  select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central, dist_nearest_mall, dist_nearest_mrt) |>
-  correlate(use = "pairwise.complete.obs", method = "pearson") |>
-  shave(upper = TRUE) |>
-  rplot() + theme_dark() + theme(axis.text.x = element_text(angle = 45, vjust = 0.3, hjust=0.5)) + ggtitle("Correlation plot")
-```
-
-```{r}
 #install.packages("corrplot")
 library(corrplot)
 
 df_R <- df |> 
   select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central, dist_nearest_mall, dist_nearest_mrt) |>
   collect()
-  
-
 
 col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA")) #Colours for correlation plot
 
