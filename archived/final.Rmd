@@ -1,0 +1,546 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+latlon_data <- read.csv('unique_add_latlon.csv')
+resale_data <- read.csv('resale_flat_prices.csv')
+
+
+```
+
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+latlon_data
+latlon_data <- select(latlon_data, -X)
+head(latlon_data)
+
+```
+
+```{r}
+
+#create a new column unique_add in latlon dataset as a key
+resale_data$unique_add  <- paste(resale_data$block, resale_data$street_name)
+
+#left join as key
+combined_data <- left_join(resale_data, latlon_data, by="unique_add")
+
+
+```
+
+```{r}
+
+install.packages("geosphere")
+library('geosphere')
+
+#lat lon of downtown core
+central_lat <- 1.287953
+central_lon <- 103.851784
+
+
+#simple test to show that the function works
+sample_lat <- 1.306064
+sample_lon <- 103.8303	
+
+sample_dist <- distm(c(sample_lon,sample_lat),c(central_lon,central_lat), fun=distCosine)
+sample_dist
+
+#apply it to combined dataset
+combined_data <- combined_data %>% rowwise() %>%mutate(dist_to_central = distm(c(Lon,Lat),c(central_lon,central_lat),fun=distCosine)/1000)
+
+
+
+```
+
+
+```{r}
+
+
+
+write.csv(combined_data, "combined_data.csv", row.names=FALSE)
+
+
+```
+
+
+
+
+```{r}
+
+setwd("~/GitHub/DSA306-Big-Data-Analytics-Project")
+library(readr)
+combined<-read_csv('combined_data.csv') 
+mallslatlon<-read_csv('malls_lat_lon.csv')
+mrtlatlon<-read_csv('mrt_lat_lon.csv')
+
+```
+
+```{r}
+
+
+mallslatlon <- mallslatlon |>           
+  filter(Lon!='NULL', Lat!= "NULL", ) |>              #filtering all the non null data columns. 
+  select(Malls,Lon,Lat)               #eliminating the first unwanted column from the dataset
+
+```
+
+```{r}
+
+
+mrtlatlon <- mrtlatlon |>
+  select(MRT_stations, Lon, Lat) |>
+  filter(Lon!= "NULL", Lat!="NULL")
+
+
+
+```
+
+Selecting unique addresses only
+```{r}
+
+uniqueaddresses <- combined |>
+  distinct(unique_add, .keep_all=TRUE)
+
+```
+
+
+Finding unique distances from MRT
+```{r}
+
+
+
+
+min_distance_mrt <- c()                  #create an empty vector to store future values in 
+
+for (i in 1:nrow(uniqueaddresses)){
+  house_lon<- as.numeric(uniqueaddresses[i,14])
+  house_lat<-as.numeric(uniqueaddresses[i,15])
+  mrt_vector<- (1:nrow(mrtlatlon)) #pre-allocate memory
+  for(i in 1:nrow(mrtlatlon)){
+    mrt_lon <- as.numeric(mrtlatlon[i,2])
+    mrt_lat <- as.numeric(mrtlatlon[i,3])
+    mrt_dist <- distm(c(house_lon,house_lat),c(mrt_lon,mrt_lat), fun = distCosine)/1000
+    mrt_vector[i] <- mrt_dist
+  }
+  min_distance_mrt <- append(min_distance_mrt, min(mrt_vector))
+}
+
+min_distance_mrt
+
+
+
+
+```
+
+Finding unique Distances from Malls
+```{r}
+
+
+
+min_distance_mall <- c()                  #create an empty vector to store future values in 
+
+for (i in 1:nrow(uniqueaddresses)){
+  house_lon<- as.numeric(uniqueaddresses[i,14])
+  house_lat<-as.numeric(uniqueaddresses[i,15])
+  mall_vector<- (1:nrow(mallslatlon)) #pre-allocate memory
+  for(i in 1:nrow(mallslatlon)){
+    mall_lon <- as.numeric(mallslatlon[i,2])
+    mall_lat <- as.numeric(mallslatlon[i,3])
+    mall_dist <- distm(c(house_lon,house_lat),c(mall_lon,mall_lat), fun = distCosine)/1000
+    mall_vector[i] <- mall_dist
+  }
+  min_distance_mall <- append(min_distance_mall, min(mall_vector))
+}
+
+min_distance_mall
+
+
+
+```
+
+
+Creating new Dataframe to store created values
+```{r}
+
+tojoin <- uniqueaddresses |>
+  select(unique_add)
+
+```
+
+
+Adding Columns to Combined Dataframe
+
+```{r}
+
+tojoin[  , ncol(tojoin) + 1] <- min_distance_mall  
+
+colnames(tojoin)[ncol(tojoin)] <- paste("dist_nearest_mall") 
+
+tojoin[  , ncol(tojoin) + 1] <- min_distance_mrt 
+
+colnames(tojoin)[ncol(tojoin)] <- paste("dist_nearest_mrt") 
+
+tojoin
+
+
+
+```
+
+Using full join to attain final dataframe
+```{r}
+
+final <- left_join(combined, tojoin, by = "unique_add")
+
+final
+
+```
+
+Removing Excess Data
+```{r}
+
+final <- final |>
+  select(month, storey_range, floor_area_sqm, flat_model, remaining_lease_std, resale_price, unique_add, dist_to_central, dist_nearest_mall, dist_nearest_mrt, town)
+  
+write.csv(final, "final_dataset.csv", row.names = FALSE)  #creating a csv file with the above code
+```
+
+
+Adding COVID predictor 
+
+```{r}
+
+library(lubridate)
+
+final <- read_csv("final_dataset.csv")
+
+final <- final |>
+  mutate(month = as.Date(paste(month, "-01", sep= ""))) |>
+  mutate(Covid = case_when(month < as.Date("2020-02-01")~0, month >= as.Date("2020-02-01")~1)) |>
+  rename(date = month)
+
+write.csv(final, "final_dataset.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+setwd("~/GitHub/DSA306-Big-Data-Analytics-Project")
+library(sparklyr)
+library(dplyr)
+
+library(lubridate)
+
+sc <- spark_connect(master = "local", version = "3.3.0")
+
+final_dataset <- spark_read_csv(sc, path = "final_dataset.csv")
+final_dataset
+
+#write parquet file
+spark_write_parquet(final_dataset,'dataset/final_v2.parquet')
+
+#read parquet file as df
+df <- spark_read_parquet(sc, 'dataset/final_v2.parquet')
+
+#Ensure that the df has the same number of rows as the original dataset (a sanity check)
+sdf_nrow(df)
+
+```
+
+```{r}
+
+
+library(corrr)
+library(ggplot2)
+
+
+df |> select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
+         dist_nearest_mall, dist_nearest_mrt) |>
+      correlate(use = "pairwise.complete.obs", method = "pearson") |>
+      shave(upper = TRUE) |>
+      rplot() + theme_dark() + theme(axis.text.x = element_text(angle = 45, vjust = 0.3, hjust=0.5)) + ggtitle("Correlation plot")
+
+
+
+```
+
+
+```{r}
+
+#install.packages("corrplot")
+library(corrplot)
+
+df <- df |> 
+  select(floor_area_sqm, remaining_lease_std, resale_price, dist_to_central,
+         dist_nearest_mall, dist_nearest_mrt) |>
+  collect()
+  
+
+
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA")) #Colours for correlation plot
+
+corrplot(cor(df), method="color", col=col(200), diag=FALSE, type="lower", order="hclust", title="Correlation Plot", addCoef.col = "black", insig = "blank", mar=c(0,0,2,0), tl.srt= 45, tl.col = "black")
+
+```
+
+
+```{r}
+#install.packages("ggrepel")
+library(ggrepel)
+
+indiv_town <- df |>
+  select(town, resale_price, dist_to_central) |>
+  group_by(town) |>
+  summarise(cost_town = mean(resale_price), dist_town = mean(dist_to_central))
+
+
+indiv_town_plot <- ggplot(data = indiv_town, aes(x = dist_town, y = cost_town)) + geom_label_repel(aes(label = town), size = 3)+ geom_point(aes(color = town), show.legend = FALSE) + geom_smooth(method = "lm", se = 0)
+
+indiv_town_plot
+
+```
+
+
+```{r}
+
+library(dbplot)
+df |> dbplot_histogram(floor_area_sqm)
+df |> dbplot_histogram(resale_price)
+df |> dbplot_histogram(remaining_lease_std)
+df |> mutate(log_price = log(resale_price)) |> collect() |> dbplot_histogram(log_price)
+
+```
+
+
+```{r}
+
+
+df |>
+dbplot_raster(x = floor_area_sqm, y = resale_price, fill = n(), resolution = 50)
+
+df |>
+dbplot_raster(x = dist_to_central, y = resale_price, fill = n(), resolution = 50) 
+
+df |>
+dbplot_raster(x = dist_nearest_mall, y = resale_price, fill = n(), resolution = 50)
+
+df |>
+dbplot_raster(x = dist_nearest_mrt, y = resale_price, fill = n(), resolution = 50)
+
+
+```
+
+
+```{r}
+#Data Visualization
+library(dplyr)
+library(ggplot2)
+library(tidyr) 
+
+
+df |> 
+  collect() |> 
+  select(date, resale_price)|>
+  mutate(date = as.factor(date)) |>
+  ggplot(aes(date, resale_price)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 80, vjust = 1, hjust=1, size =5), 
+                         axis.ticks.margin=unit(0,'cm')) + xlab("Date") + ylab('Resale Flat Prices') +
+  ggtitle("Boxplots of Resale Flat Prices over time")
+
+#view quantiles computed for each record
+#data <- df |> collect() |> group_by(month) |>summarise(quantile = list(round(quantile(resale_price,c(.10,.25,0.5,0.75)),1))) |> unnest_wider(quantile)
+
+
+df |> 
+  collect() |>
+  group_by(storey_range) |> 
+  arrange(storey_range) |>
+  ggplot(aes(storey_range, resale_price)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 0.8, hjust=0.9), axis.ticks.margin=unit(0,'cm')) +
+  xlab("Storey Ranges") +
+  ylab("Resale Flat Prices") +
+  ggtitle("Boxplots of Resale Flat Prices over Storey Ranges")
+  
+
+
+
+```
+
+
+
+
+```{r}
+glimpse(df)
+```
+
+```{r}
+
+df |> 
+  ml_linear_regression(formula = resale_price ~ floor_area_sqm + remaining_lease_std + dist_to_central + dist_nearest_mall + dist_nearest_mrt + storey_range + Covid) |>
+  summary()
+```
+
+Determine which variables to use as features.
+unique_add replaced by the various distance measures.
+month replaced by remaining_lease_std.
+
+```{r}
+pipeline <- ml_pipeline(sc) |>
+  ft_string_indexer(
+    input_col = "flat_model", output_col = "flat_model_index"
+    ) |>
+  ft_string_indexer(
+    input_col = "storey_range", output_col = "storey_range_index"
+    ) |>
+  ft_vector_assembler(
+    input_cols = c("floor_area_sqm", "remaining_lease_std", "dist_to_central", "dist_nearest_mall", "dist_nearest_mrt", "flat_model_index", "storey_range_index", "Covid"),
+    output_col = "features"
+  ) |>
+  ft_standard_scaler(
+    input_col = "features",
+    output_col = "features_scaled",
+    with_mean = TRUE
+  ) |>
+  ml_linear_regression(
+    features_col = "features_scaled",
+    label_col = "resale_price"
+  )
+
+pipeline
+```
+
+Saving pipeline
+
+```{r}
+ml_save(pipeline, path = "spark_pipeline_hdb", overwrite = TRUE)
+```
+
+Loading pipeline
+
+```{r}
+pipeline <- ml_load(sc, path = "spark_pipeline_hdb")
+```
+
+Split df to train and test sets.
+
+```{r}
+df_split <- df |>
+  sdf_random_split(training = 0.8, testing = 0.2, seed = 212)
+
+df_train <- df_split$training
+df_test <- df_split$testing
+```
+
+
+
+Fitting pipeline to model.
+
+```{r}
+pipeline_model <- ml_fit(pipeline, df_train)  
+pipeline_model
+```
+
+
+Cross validate pipeline_model.
+
+```{r}
+
+cv <- ml_cross_validator(
+  sc,
+  estimator = pipeline,
+  estimator_param_maps = list(
+    linear_regression = list(
+      elastic_net_param = c(0,1),
+      reg_param = c(0.1, 0.005, 0.001)
+    )
+  ),
+  evaluator = ml_regression_evaluator(
+    sc,
+    label_col = "resale_price"
+  ),
+  num_folds = 10,
+  parallelism = 3,
+  seed = 212
+)
+
+cv
+```
+
+```{r}
+cv_model <- ml_fit(cv, df_train)
+
+cv_model$best_model
+
+ml_validation_metrics(cv_model) |>
+  arrange(rmse)
+```
+
+
+```{r}
+
+#is_ml_transformer(cv_model)
+
+cv_predict <- ml_predict(cv_model$best_model, df_test)
+
+
+RMSE_1 <- ml_regression_evaluator(
+cv_predict,
+label_col = "resale_price",
+prediction_col = "prediction",
+metric_name = "rmse"
+)
+
+RMSE_1
+
+```
+
+
+
+Save ML model.
+
+```{r}
+ml_save(cv_model$best_model, path = "spark_model_hdb", overwrite = TRUE)
+```
+
+```{r}
+library(sparklyr)
+ml_load(sc, path="spark_model_hdb")
+```
+
+
+Plumber
+
+For simplicity sake, we will not input unique_add in plumber API so as to reduce computing time. We draw a random resale flat from the test set df_test to use its data for demonstration purposes.
+
+```{r}
+set.seed(212)
+collect(df_test)[sample(1:30000,1),]
+```
+
+resale_price: 450000
+storey_range: 04 TO 06
+floor_area_sqm: 110
+flat_model: Improved
+remaining_lease_std: 85
+unique_add: 101A PUNGGOL FIELD
+dist_to_central: 13.64757
+dist_nearest_mall: 0.6587825
+dist_nearest_mrt: 1.356258
+town: PUNGGOL
+Covid: 0
+
+We will use these values in the API.
+
+```{r}
+#install.packages("plumber")
+library(plumber)
+
+plumb(file = "spark-plumber-hdb.R") |>
+  pr_run(port = 8000)
+```
+
+
+
