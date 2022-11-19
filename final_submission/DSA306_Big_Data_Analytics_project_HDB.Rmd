@@ -13,7 +13,7 @@ Lines 14 to 681 covers the process of obtaining our final data set. Due to the l
 
 # Obtaining data
 
-We obtain our resale price data from Data.gov.sg (https://data.gov.sg/dataset/resale-flat-prices).
+We obtained our resale price data from Data.gov.sg (https://data.gov.sg/dataset/resale-flat-prices).
 
 ## onemap API
 
@@ -445,32 +445,6 @@ df2.head()
 combined_latlon_xy = pd.merge(df1,df2, how='inner', on='unique_add')
 combined_latlon_xy.head()
 combined_latlon_xy.to_csv('unique_add_latlon.csv')
-```
-
-```{python}
-#results do not seem to be useful
-import requests
-import json
-base_url = "https://developers.onemap.sg/"
-token_path= "/privateapi/auth/post/getToken"
-result= requests.post(base_url+token_path, data={"email":'xxxxx', 'password':'xxxxx'})
-print(result.json())
-
-with open('keys.txt') as f:
-    doc = f.readlines()
-
-token = json.loads(str(doc[0]))['access_token']
-print(token)
-```
-
-```{python}
-#results do not seem to be useful
-
-reverse_geopath="/privateapi/commonsvc/revgeocodexy?location={}&token={}&buffer={}&addressType={}".format('28537.68004,38825.23263', token,500,'All')
-print(reverse_geopath)
-
-result= requests.get(base_url+reverse_geopath)
-print(result.json())
 ```
 
 ## Joining lat/long with original
